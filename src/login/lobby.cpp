@@ -403,16 +403,20 @@ int32 lobbydata_parse(int32 fd)
                         if (sql->Query(fmtQuery, sd->accid, charid, session_key, ZoneIP, ZonePort, sd->client_addr,
                                        (uint8)sessions[sd->login_lobbyview_fd]->ver_mismatch) == SQL_ERROR)
                         {
+                            fmtQuery = "UPDATE accounts_sessions SET session_key = x'%s', client_addr = %u " 
+                                    "WHERE accid = %u AND charid = %u";
+                            sql->Query(fmtQuery, session_key, sd->client_addr, sd->accid, charid);
                             // Send error message to the client.
-                            LOBBBY_ERROR_MESSAGE(ReservePacketError);
+                            //LOBBBY_ERROR_MESSAGE(ReservePacketError);
                             // Set the error code:
                             //     Unable to connect to world server. Specified operation failed
-                            ref<uint16>(ReservePacketError, 32) = 305;
-                            std::memcpy(MainReservePacket, ReservePacketError, ref<uint8>(ReservePacketError, 0));
+                            //ref<uint16>(ReservePacketError, 32) = 305;
+                            //std::memcpy(MainReservePacket, ReservePacketError, ref<uint8>(ReservePacketError, 0));
                         }
-
-                        fmtQuery = "UPDATE char_stats SET zoning = 2 WHERE charid = %u";
-                        sql->Query(fmtQuery, charid);
+                        else {
+                            fmtQuery = "UPDATE char_stats SET zoning = 2 WHERE charid = %u";
+                            sql->Query(fmtQuery, charid);
+                        }
                     }
                     else
                     {
