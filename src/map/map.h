@@ -34,6 +34,7 @@
 
 #include <list>
 #include <map>
+#include <rdkafka.h>
 
 #include "command_handler.h"
 #include "zone.h"
@@ -80,11 +81,17 @@ extern std::unique_ptr<SqlConnection> sql;
 
 extern bool gLoadAllLua;
 
+extern rd_kafka_t* kafka_producer;
+extern rd_kafka_conf_t* kafka_conf;
+
 //=======================================================================
 
 int32 recv_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_data_t*); // main function to parse recv packets
 int32 parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_data_t*);      // main function parsing the packets
 int32 send_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_data_t*); // main function is building big packet
+
+void kafka_init();
+void log_packet_in(map_session_data_t* const PSession, CCharEntity* const PChar, CBasicPacket data);
 
 void map_helpscreen(int32 flag);
 

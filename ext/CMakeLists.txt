@@ -1,5 +1,8 @@
+set(RDKAFKA_BUILD_STATIC ON CACHE BOOL "")
+
 add_subdirectory(concurrentqueue)
 add_subdirectory(detour)
+add_subdirectory(librdkafka)
 # add_subdirectory(lua) # Handled globally 
 # add_subdirectory(mysql) # Handled globally
 add_subdirectory(recast)
@@ -28,6 +31,7 @@ CPMAddPackage(
 
 set(EXTERNAL_LIBS
     concurrentqueue
+    rdkafka++
     mariadbclient
     spdlog
     recast

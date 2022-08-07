@@ -33,6 +33,7 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 #include <cstdlib>
 #include <cstring>
 #include <thread>
+#include <rdkafka.h>
 
 #include "ability.h"
 #include "job_points.h"
@@ -177,7 +178,43 @@ map_session_data_t* mapsession_createsession(uint32 ip, uint16 port)
  *  do_init                                                              *
  *                                                                       *
  ************************************************************************/
+rd_kafka_t* kafka_producer;
+rd_kafka_conf_t* kafka_conf;
 
+#include "common/json.hpp"
+#include "common/base64.h"
+
+using nlohmann::json;
+
+void log_packet_in(map_session_data_t* const PSession, CCharEntity* const PChar, CBasicPacket data) {
+    if (data.getType() == 21) {
+        return;
+    }
+    json msg, session, packet;
+    session["client_addr"] = ip2str(PSession->client_addr);
+    session["client_port"] = PSession->client_port;
+    packet["type"] = data.getType();
+    packet["size"] = data.getSize();
+    packet["data"] = base64_encode( (uint8*)data, data.getSize() );
+    msg["session"] = session;
+    msg["packet"] = packet;
+    std::string msgStr = msg.dump();
+    rd_kafka_producev(kafka_producer,
+        RD_KAFKA_V_TOPIC("packets-in"),
+        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+        RD_KAFKA_V_KEY( (void*)"packet", strlen("packet")),
+        RD_KAFKA_V_VALUE( (void*)msgStr.c_str(), msgStr.length() ),
+        RD_KAFKA_V_END
+    );
+    rd_kafka_flush(kafka_producer, 50);
+}
+
+void kafka_init() {
+    char errstr[256];
+    kafka_conf = rd_kafka_conf_new();
+    rd_kafka_conf_set(kafka_conf, "bootstrap.servers", "broker:9092", errstr, sizeof(errstr));
+    kafka_producer = rd_kafka_new(RD_KAFKA_PRODUCER, kafka_conf, errstr, sizeof(errstr));
+}
 int32 do_init(int32 argc, char** argv)
 {
     TracyZoneScoped;
@@ -216,6 +253,9 @@ int32 do_init(int32 argc, char** argv)
 
     ShowInfo("do_init: zlib is reading");
     zlib_init();
+
+    ShowInfo("do_init: kafka init");
+    kafka_init();
 
     ShowInfo("do_init: starting ZMQ thread");
     message::init();
