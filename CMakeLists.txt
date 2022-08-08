@@ -70,3 +70,8 @@ include(ClangTidy)
 include(Fuzzing)
 
 add_subdirectory(src)
+
+file(COPY ${CMAKE_SOURCE_DIR}/tools DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY ${CMAKE_SOURCE_DIR}/settings DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY ${CMAKE_SOURCE_DIR}/scripts DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY ${CMAKE_SOURCE_DIR}/sql DESTINATION ${CMAKE_BINARY_DIR})
