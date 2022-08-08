@@ -660,7 +660,7 @@ namespace message
 
     void init()
     {
-        init(settings::get<std::string>("network.ZMQ_IP").c_str(), settings::get<uint16>("network.ZMQ_PORT"));
+        init(settings::get<std::string>("network.ZMQ_HOST").c_str(), settings::get<uint16>("network.ZMQ_PORT"));
     }
 
     void init(const char* chatIp, uint16 chatPort)

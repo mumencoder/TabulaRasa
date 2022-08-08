@@ -11,7 +11,7 @@ xi.settings = xi.settings or {}
 
 xi.settings.network =
 {
-    SQL_HOST     = "127.0.0.1",
+    SQL_HOST     = "db",
     SQL_PORT     = 3306,
     SQL_LOGIN    = "root",
     SQL_PASSWORD = "root",
@@ -24,12 +24,12 @@ xi.settings.network =
     LOGIN_AUTH_IP   = "0.0.0.0",
     LOGIN_AUTH_PORT = 54231,
 
-    MAP_PORT = 54230,
+    MAP_PORT = 22222,
 
     SEARCH_PORT = 54002,
 
     -- Central message server settings (ensure these are the same on both all map servers and the central (lobby) server
-    ZMQ_IP   = "127.0.0.1",
+    ZMQ_HOST   = "ffxi_server_main",
     ZMQ_PORT = 54003,
 
     -- ===========================

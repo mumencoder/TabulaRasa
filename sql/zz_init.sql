@@ -1,6 +1,4 @@
 
-UPDATE `zone_settings` SET zoneip="172.23.66.53";
-
 INSERT INTO accounts(id,login,password,timecreate,timelastmodify,status,priv)\
 	VALUES(1000,'admin',PASSWORD('admin'),'2020:06:01 12:00:00',NULL,1,4);
 INSERT INTO chars(charid,accid,charname,pos_x,pos_y,pos_z,pos_zone,pos_prevzone,playtime,nation)\

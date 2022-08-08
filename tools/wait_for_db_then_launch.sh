@@ -5,11 +5,6 @@ while ! mysql --host=$XI_NETWORK_SQL_HOST --port=$XI_NETWORK_SQL_PORT --user=$XI
 done
 sleep 5
 
-for f in modules/era/sql/*.sql; do
-    echo -e "Importing $f into the database..."
-    mysql --host=$XI_NETWORK_SQL_HOST --port=$XI_NETWORK_SQL_PORT --user=$XI_NETWORK_SQL_LOGIN --password=$XI_NETWORK_SQL_PASSWORD $XI_NETWORK_SQL_DATABASE < $f
-done
-
 # Start servers
 echo "starting xi_connect"
 nohup ./xi_connect &

@@ -1,5 +1,6 @@
 mysql-connector-python == 8.0.28
 gitpython
+lupa
 pylint
 pyyaml
 colorama

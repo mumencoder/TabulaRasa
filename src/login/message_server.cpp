@@ -22,6 +22,8 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 #include <concurrentqueue.h>
 #include <memory>
 #include <queue>
+#include <netdb.h>
+#include <sys/socket.h>
 
 #include "common/logging.h"
 #include "login.h"
@@ -250,8 +252,12 @@ void message_server_init()
 
     zSocket->set(zmq::sockopt::rcvtimeo, 500);
 
+    hostent* he;
+    char zmq_ip[128];
+    he = gethostbyname( settings::get<std::string>("network.ZMQ_HOST").c_str() );
+    inet_ntop( AF_INET, he->h_addr_list[0], zmq_ip, 128);
     auto server = fmt::format("tcp://{}:{}",
-                              settings::get<std::string>("network.ZMQ_IP"),
+                              zmq_ip,
                               settings::get<std::string>("network.ZMQ_PORT"));
 
     try
@@ -260,7 +266,7 @@ void message_server_init()
     }
     catch (zmq::error_t& err)
     {
-        ShowCritical("Unable to bind chat socket: %s", err.what());
+        ShowCritical("Unable to bind chat socket: %s %s", server, err.what());
     }
 
     message_server_listen();
