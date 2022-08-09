@@ -29,8 +29,11 @@ RUN python3 -m pip install -r ./tools/requirements.txt
 
 # Configure and build
 ADD . /lsb-src
-WORKDIR /lsb-src
-RUN mkdir docker_build && cd docker_build && cmake .. && make -j $(nproc)  && cd .. && rm -r docker_build
+#### no cluster
+#WORKDIR /lsb-src
+#RUN cmake . && make -j $(nproc)
+#### 
+
 ADD ./settings/default/ ./settings
 
 ENTRYPOINT [""]

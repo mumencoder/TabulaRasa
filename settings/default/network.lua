@@ -24,7 +24,7 @@ xi.settings.network =
     LOGIN_AUTH_IP   = "0.0.0.0",
     LOGIN_AUTH_PORT = 54231,
 
-    MAP_PORT = 22222,
+    MAP_PORT = 0,
 
     SEARCH_PORT = 54002,
 

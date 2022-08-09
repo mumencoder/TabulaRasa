@@ -42,10 +42,7 @@ def assign_zone_ips():
     db = wait_for_db()
     cur = db.cursor()
 
-    base_zoneport = 22222
-    zoneports = []
-    for i in range(0,1):
-        zoneports.append( base_zoneport + i)
+    zoneports = [22220,22221,22222,22223,22230,22231,22232,22233]
 
     zone_assigns = []
     cur.execute("SELECT zoneid FROM `zone_settings`")
