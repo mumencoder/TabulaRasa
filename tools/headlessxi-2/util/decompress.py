@@ -1,4 +1,5 @@
-from .util import util
+
+from .bytes import memcpy
 
 SIZEOF_INT = 4 # 4-bytes
 DECOMPRESS_DAT_DATA = [
@@ -301,5 +302,5 @@ class Decompress:
             i = i + 1
 
         final_buf = bytearray(w)
-        util.memcpy(out_buf, 0, final_buf, 0, w)
+        memcpy(out_buf, 0, final_buf, 0, w)
         return final_buf
