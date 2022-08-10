@@ -30,7 +30,7 @@ services:
       XI_BINARY_DIR: /lsb-build
 #     XI_BINARY_DIR: /lsb-src
       PYTHONUNBUFFERED: 1
-      XI_NETWORK_MAP_HOST: 172.23.66.53
+      XI_NETWORK_MAP_HOST: "${HOST_EXTERNAL_IP}"
     command: > 
       /bin/bash -c 'cmake -S/lsb-src -B/lsb-build && cd /lsb-build && make -j 8 && python3 ./tools/docker/launch_lobby.py'
     depends_on:
@@ -73,7 +73,7 @@ services:
       XI_BINARY_DIR: /lsb-build
 #     XI_BINARY_DIR: /lsb-src
       PYTHONUNBUFFERED: 1
-      XI_NETWORK_MAP_HOST: 172.23.66.53
+      XI_NETWORK_MAP_HOST: "${HOST_EXTERNAL_IP}"
       XI_NETWORK_MAP_PORTS: 22220,22221,22222,22223
     command: >
       /bin/bash -c 'dockerize --wait tcp://ffxi_server_main:54001 --timeout 2h -wait-retry-interval 20s && python3 ./tools/docker/launch_map.py'
@@ -108,7 +108,7 @@ services:
       XI_BINARY_DIR: /lsb-build
 #     XI_BINARY_DIR: /lsb-src
       PYTHONUNBUFFERED: 1
-      XI_NETWORK_MAP_HOST: 172.23.66.53
+      XI_NETWORK_MAP_HOST: "${HOST_EXTERNAL_IP}"
       XI_NETWORK_MAP_PORTS: 22230,22231,22232,22233
     command: >
       /bin/bash -c 'dockerize --wait tcp://ffxi_server_main:54001 --timeout 2h -wait-retry-interval 20s && python3 ./tools/docker/launch_map.py'
@@ -225,7 +225,7 @@ services:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://172.23.66.53:9092,PLAINTEXT_INTERNAL://broker:29092
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://${HOST_EXTERNAL_IP}:9092,PLAINTEXT_INTERNAL://broker:29092"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
