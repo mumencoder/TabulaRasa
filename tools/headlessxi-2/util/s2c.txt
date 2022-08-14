@@ -1,0 +1,124 @@
+0x008 - zone visited
+0x009 - message standard
+0x00A - zone in
+0x00B - server ip
+0x00D - char update
+0x00E - entity update
+0x017 - chat message
+0x01B - char job info
+0x01C - inventory size
+0x01D - inventory finish
+0x01E - inventory modify
+0x01F - inventory assign
+0x020 - inventory item
+0x021 - trade request
+0x022 - trade action
+0x023 - trade update
+0x025 - trade item
+0x026 - inventory count
+0x027 - caught fish
+        message name
+0x028 - action
+0x029 - message basic
+0x02A - message special
+0x02D - message combat
+0x02E - mog menu
+0x02F - chocobo digging
+0x030 - synth animation
+0x031 - synth suggestion
+0x032 - event info
+0x033 - event info
+0x036 - message text
+0x037 - char personal update
+0x038 - client entity animation
+0x039 - client entity visual
+0x03A - client entity interact animation
+0x03C - shop list items
+0x03D - shop appraise
+0x03E - shop menu
+0x03F - shop buy
+0x041 - client downloading end
+0x042 - message blacklist
+0x043 - caught monster
+0x044 - char automaton update
+0x04B - delivery box
+0x04C - auction house
+0x04D - message server
+0x04F - client downloading start
+0x050 - char equip update
+0x051 - char appearance
+0x052 - release
+0x053 - message system
+0x055 - char key items
+0x056 - char mission log
+0x057 - weather change
+0x058 - char lockon
+0x059 - world pass
+0x05A - char emote
+0x05B - entity position
+0x05C - event var update
+0x05D - event var update 
+0x05E - conquest map 
+0x05F - client music change
+0x061 - char stats
+0x062 - char skills
+0x063 - map marker update
+	jobpoints menu
+	merit menu
+	unity menu
+	monipulator
+	status effects
+0x065 - entity position
+0x067 - char effects
+        entity effects
+0x068 - pet info
+0x06F - message synth
+0x070 - synth result
+0x071 - campaign map
+0x075 - client timer bar update
+0x076 - party effects
+0x077 - entity enabled update
+0x081 - fish oldstyle update
+0x082 - guild menu stock buy
+0x083 - guild menu buy
+0x084 - guild menu stock sell
+0x085 - guild menu sell
+0x086 - guild menu open result
+0x08C - merit points categories
+0x08D - jobpoint data
+0x0A0 - party map
+0x0AA - char spells
+0x0AC - char abilities
+0x0AE - char mounts info
+0x0B4 - menu config
+0x0BF - instance entry 
+0x0C8 - party define
+0x0C9 - char check
+0x0CA - bazaar message
+0x0CC - linkshell message
+0x0D2 - treasure pool add item
+0x0D3 - treasure pool lot item
+0x0DC - party invite
+0x0DD - party member update
+0x0DF - char health update
+0x0E0 - linkshell equip
+0x0E1 - party search
+0x0F5 - wide scan track
+0x0F6 - wide scan update
+0x0F9 - raise menu
+0x0FA - furniture interact
+0x105 - bazaar item
+0x106 - bazaar purchase
+0x107 - bazaar close
+0x108 - bazaar check
+0x109 - bazaar confirm
+0x110 - RoE sparks info
+0x111 - RoE update
+0x10E - release
+0x112 - RoE quest log
+0x113 - currency 1
+0x115 - fish newstyle update
+0x116 - macro equipset
+0x118 - currency 2
+0x119 - char recast info
+0x11E - char emote jump

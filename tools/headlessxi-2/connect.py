@@ -1,6 +1,6 @@
 
 from common import *
-from hxiclient import *
+from client import *
 
 data = config.load_data()
 
@@ -11,8 +11,8 @@ print( account )
 #account = {"name":"admin", "pass":"admin"} 
 
 async def main():
-    client = HXIClient(account, "192.168.36.103")
-    while len(client.tasks) > 0:
+    client = HXIClient(account, "172.31.177.56")
+    while client.running:
         await asyncio.sleep(0.2)
         await client.update()
 

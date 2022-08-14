@@ -7,11 +7,26 @@ def unpack_uint16(data, offset):
 def unpack_uint32(data, offset):
     return struct.unpack_from('<I', data, offset)[0]
 
+def unpack_uint32_nb(data, offset):
+    return struct.unpack_from('>I', data, offset)[0]
+
+def unpack_float(data, offset):
+    return struct.unpack_from('<f', data, offset)[0]
+    
 def unpack_str(data, offset, size):
     end_offset = offset
     while data[end_offset] != 0 and end_offset-offset < size:
         end_offset += 1
     return data[offset:end_offset].decode('utf-8')
+
+def unpack_binary(data, offset, size):
+    return data[offset:offset+size]
+
+def unpack_ip(data, offset):
+    s = ""
+    for i in range(0,4):
+        s += str(data[offset+i]) + '.'
+    return s[0:-1]
 
 def pack_16(data):
     return struct.pack('<H', data)
