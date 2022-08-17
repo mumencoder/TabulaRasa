@@ -117,6 +117,7 @@ class MapPacket(object):
     order = 1
 
     s2c = load_packet_types('./util/s2c.txt')
+    c2s = load_packet_types('./util/c2s.txt')
 
     def parse_large_packet(data):
         offset = MapPacket.FFXI_HEADER_SIZE
@@ -137,24 +138,22 @@ class MapPacket(object):
         data = bytearray(28 + len(payload) + 16)
         MapPacket.order += 1
         util.memcpy(util.pack_16(MapPacket.order), 0, data, 0, 2)
-        util.memcpy(util.pack_16(packet_id), 0, data, MapPacket.FFXI_HEADER_SIZE, 2)
-        util.memcpy(payload, 0, data, MapPacket.FFXI_HEADER_SIZE, len(data))
-        util.memcpy(util.pack_16(MapPacket.order), 0, data, MapPacket.FFXI_HEADER_SIZE + 2, 2)
-        MapPacket.packet_md5(data, payload)
+        util.memcpy(util.pack_16(packet_id), 0, payload, 0, 2)
+        if len(payload) % 4 != 0:
+            print("packet not multiple of 4")
+        payload[1] = (len(payload) & 0xFD) >> 1
+        if packet_id > 255:
+            payload[1] += 1
+        util.memcpy(util.pack_16(MapPacket.order), 0, payload, 2, 2)
+        util.memcpy(payload, 0, data, MapPacket.FFXI_HEADER_SIZE, len(payload))
+        MapPacket.packet_md5(data)
         return data
 
-    def packet_md5(data, payload):
-        util.memcpy(hashlib.md5(payload).digest(), 0, data, len(data)-16, 16)
-
-    class Client(object):
-        def zone_login(charid):
-            data = bytearray(80)
-            data[1] = 0x2E
-            util.memcpy(util.pack_32(charid), 0, data, 12, 4)
-            return MapPacket.packet_header(0x0A, data)
-
-        def zone_confirm():
-            return MapPacket.packet_header(0x11, bytearray(16))
+    def packet_md5(data):
+        to_md5 = bytearray(len(data) - (MapPacket.FFXI_HEADER_SIZE + 16))
+        util.memcpy(data, MapPacket.FFXI_HEADER_SIZE, to_md5, 0, len(to_md5))
+        to_md5 = hashlib.md5(to_md5)
+        util.memcpy(to_md5.digest(), 0, data, len(data) - 16, 16)
 
 def big_packet_decrypt(self, data):
     print( binascii.hexlify(data) )

@@ -1,0 +1,114 @@
+0x000 - fin
+0x00A - Log into zone
+0x00C - character information request
+0x00D - player leaving zone
+0x00F - player info quest
+0x011 - Player Zone Transition Confirmation
+0x015 - Player sync
+0x016 - entity information request
+0x017 - invalid npc information response
+0x01A - player action
+0x01B - world pass
+0x028 - item disposal
+0x029 - item movement
+0x032 - trade request
+0x033 - trade request action
+0x034 - update trade item slot
+0x036 - trade complete
+0x037 - use item
+0x03A - sort inventory
+0x03B - mannequin equip
+0x03D - blacklist command
+0x041 - treasure pool lot
+0x042 - treasure pool pass
+0x04B - server message request
+0x04D - delivery box
+0x04E - Auction House
+0x050 - equipment change
+0x051 - /equipset
+0x052 - add equipment to set
+0x053 - lock styleset
+0x058 - request synth suggestion
+0x059 - synthesis complete
+0x05A - regional map update
+0x05B - event update
+0x05C - event update player position
+0x05D - /jobemote
+0x05E - zone movement request
+0x060 - event update string
+0x061 - player load ????
+0x063 - chocobo digging
+0x064 - mark key item as seen
+0x066 - fishing action
+0x06E - party invite
+0x06F - party leave
+0x070 - party disband
+0x071 - party kick
+0x074 - party invite response
+0x076 - party list
+0x077 - party change leader
+0x078 - party search
+0x083 - vendor item purchase
+0x084 - vendor appraise
+0x085 - vendor item sell
+0x096 - begin synth
+0x0A2 - dice roll
+0x0AA - guild shop purchase
+0x0AB - guild shop stock
+0x0AC - guild shop sell
+0x0AD - guild shop stock
+0x0B5 - send chat message
+0x0B6 - send tell
+0x0BE - set merit mode
+0x0BF - increase job point
+0x0C0 - job points details
+0x0C3 - create linkpearl
+0x0C4 - create linkshell
+0x0CB - mog house menu
+0x0D2 - party map marker request
+0x0D3 - help desk report
+0x0DB - set chat/language filters
+0x0DC - set name flags
+0x0DD - check target
+0x0DE - set message - bazaar
+0x0E0 - set message - search
+0x0E1 - request linkshell message
+0x0E2 - update linkshell message
+0x0E7 - request exit game
+0x0E8 - command - /heal
+0x0EA - command - /sit
+0x0EB - request special release
+0x0F1 - cancel status effect
+0x0F2 - update player zone boundary
+0x0F4 - request wide scan
+0x0F5 - wide scan set track
+0x0F6 - wide scan cancel track
+0x0FA - mog house place furniture
+0x0FB - mog house remove furniture
+0x0FC - mog house plant flowerpot
+0x0FD - mog house examine flowerpot
+0x0FE - mog house uproot flowerpot
+0x0FF - mog house dry flowerpot
+0x100 - job change
+0x102 - set blue magic spells
+0x104 - bazaar shop - leave
+0x105 - bazaar shop - browse
+0x106 - bazaar shop - purchase
+0x109 - bazaar shop - exit price editor
+0x10A - bazaar shop - set price
+0x10B - bazaar shop - open price editor
+0x10C - start RoE
+0x10D - drop RoE
+0x10E - claim RoE
+0x10F - request currency1 data
+0x110 - fishing action (new)
+0x111 - request style lock
+0x112 - request RoE log
+0x113 - command - /sitchair
+0x114 - request map markers
+0x115 - request currency2 data
+0x116 - unity menu
+0x117 - unity rankings
+0x118 - unity chat on/off
+0x11B - job master display
+0x11D - command - /jump

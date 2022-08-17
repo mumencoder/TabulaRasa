@@ -34,9 +34,14 @@ def pack_16(data):
 def pack_32(data):
     return struct.pack('<I', data)
 
+def pack_float(data):
+    return struct.pack('<f', data)
+
 def pack_str(data):
     return data.encode('utf-8') 
 
+def assign(src, dst, dst_offset):
+    memcpy(src, 0, dst, dst_offset, len(src))
 
 def memcpy(src, src_offset, dst, dst_offset, count):
     if len(src) < count:

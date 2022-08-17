@@ -1,14 +1,29 @@
 
+from common import *
+
+class CharState(object):
+    pass
+
 class Char(object):
     def __init__(self):
+        self.state = CharState()
+        self.state.last_loc_update = time.time()
+
         self.zone = None
         self.rot = None
         self.x = None
         self.y = None
         self.z = None
+
+        self.hp = None
+        self.mp = None
+        self.tp = None
         self.hpp = None
+        self.mpp = None
+
         self.speed = None
         self.subspeed = None
+
         self.str = None
         self.strplus = None
         self.dex = None
@@ -24,6 +39,16 @@ class Char(object):
         self.chr = None
         self.chrplus = None
 
+        self.target_id = 0
+
+        self.equip = {}
+        self.inventory = {}
+
+        self.inventory_sizes = {}
+
+    def get_point(self):
+        return Point(self.x, self.y, self.z)
+
     def updateAttrs( self, attrs):
         for key, value in attrs.items():
             if not hasattr(self, key):
@@ -34,9 +59,13 @@ class Char(object):
         self.zone = zone
 
     def updateLocation( self, **kwargs ):
+        self.state.last_loc_update = time.time()
         self.updateAttrs(kwargs)
 
     def updateSpeed( self, **kwargs):
+        self.updateAttrs(kwargs)
+
+    def updateHealth( self, **kwargs):
         self.updateAttrs(kwargs)
 
     def updateHpp( self, hpp ):
@@ -50,3 +79,12 @@ class Char(object):
 
     def updateSJob( self, sjob):
         self.sjob = sjob
+
+    def updateEquipWorn(self, equip_slot, inv_slot, container):
+        self.equip[equip_slot] = {"inv_slot":inv_slot, "container":container}
+
+    def updateInventory(self, loc, item):
+        self.inventory[loc] = item
+
+    def updateInventorySize(self, name, size):
+        self.inventory_sizes[name] = size
