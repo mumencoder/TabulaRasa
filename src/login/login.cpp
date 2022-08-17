@@ -18,6 +18,7 @@
 
 ===========================================================================
 */
+#include "common/kafka.h"
 #include "common/logging.h"
 #include "common/mmo.h"
 #include "common/socket.h"
@@ -86,6 +87,7 @@ int32 do_init(int32 argc, char** argv)
         ShowInfo("Character deletion is currently disabled.");
     }
 
+    kafka_init();
     messageThread = std::thread(message_server_init);
 
     // clang-format off

@@ -233,6 +233,7 @@ struct socket_data
     } flag;
 
     uint32 client_addr; // remote client address
+    uint16 client_port;
 
     std::string rdata, wdata;
     size_t      rdata_pos;

@@ -19,6 +19,9 @@
 ===========================================================================
 */
 
+#include "common/base64.h"
+#include "common/json.hpp"
+#include "common/kafka.h"
 #include "common/logging.h"
 #include "common/md52.h"
 #include "common/socket.h"
@@ -34,6 +37,69 @@
 int32 login_lobbydata_fd;
 int32 login_lobbyview_fd;
 
+using nlohmann::json;
+
+static int msg_id = 0;
+
+#define LOG_READ_PACKET(topic, fd) log_packet(topic, *sessions[fd], sessions[fd]->rdata.substr(0, RFIFOREST(fd)))
+#define LOG_WRITE_PACKET(topic, fd) log_packet(topic, *sessions[fd], sessions[fd]->wdata)
+
+json to_json(socket_data socket) {
+    json j;
+    j["client_addr"] = ip2str(socket.client_addr);
+    j["client_port"] = socket.client_port;
+    return j;
+}
+
+json to_json(login_session_data_t session) {
+    json j;
+    j["accid"] = session.accid;
+    j["login"] = session.login;
+    return j;
+}
+
+void log_connect(socket_data socket, const char* state) {
+    json msg;
+    msg["socket"] = to_json(socket); 
+    auto session = static_cast<login_session_data_t*>(socket.session_data);
+    if (session != NULL) {
+        msg["session"] = to_json(*session);
+    }
+    msg["state"] = state;
+    msg["id"] = msg_id;
+    msg_id += 1;
+    std::string msgStr = msg.dump();
+    rd_kafka_producev(kafka_producer,
+        RD_KAFKA_V_TOPIC("lobby-socket"),
+        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+        RD_KAFKA_V_KEY( (void*)"msg", strlen("msg")),
+        RD_KAFKA_V_VALUE( (void*)msgStr.c_str(), msgStr.length() ),
+        RD_KAFKA_V_END
+    );
+    rd_kafka_flush(kafka_producer, 50);
+}
+
+void log_packet(const char* topic, socket_data socket, std::string data) {
+    json msg;
+    msg["socket"] = to_json(socket);
+    auto session = static_cast<login_session_data_t*>(socket.session_data);
+    if (session != NULL) {
+        msg["session"] = to_json(*session);
+    }
+    msg["data"] = base64_encode( (unsigned char*)data.c_str(), data.length() );
+    msg["id"] = msg_id;
+    msg_id += 1;
+    std::string msgStr = msg.dump();
+    rd_kafka_producev(kafka_producer,
+        RD_KAFKA_V_TOPIC(topic),
+        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+        RD_KAFKA_V_KEY( (void*)"msg", strlen("msg")),
+        RD_KAFKA_V_VALUE( (void*)msgStr.c_str(), msgStr.length() ),
+        RD_KAFKA_V_END
+    );
+    rd_kafka_flush(kafka_producer, 50);
+}
+
 int32 connect_client_lobbydata(int32 listenfd)
 {
     int32              fd = 0;
@@ -43,7 +109,10 @@ int32 connect_client_lobbydata(int32 listenfd)
         create_session(fd, recv_to_fifo, send_from_fifo, lobbydata_parse);
         sessions[fd]->wdata.resize(5);
         sessions[fd]->client_addr = ntohl(client_address.sin_addr.s_addr);
+        sessions[fd]->client_port = client_address.sin_port;
         sessions[fd]->wdata[0]    = 0x01;
+        log_connect(*sessions[fd], "data-open");
+        LOG_WRITE_PACKET("lobby-data-out", fd);
         return fd;
     }
     return -1;
@@ -52,6 +121,9 @@ int32 connect_client_lobbydata(int32 listenfd)
 int32 lobbydata_parse(int32 fd)
 {
     login_session_data_t* sd = (login_session_data_t*)sessions[fd]->session_data;
+
+    RFIFOFLUSH(fd);
+    LOG_READ_PACKET( "lobby-data-in", fd);
 
     if (sd == nullptr)
     {
@@ -70,6 +142,7 @@ int32 lobbydata_parse(int32 fd)
 
             sd->login_lobbydata_fd     = fd;
             sessions[fd]->session_data = sd;
+            RFIFOSKIP(fd, sessions[fd]->rdata.size());
             return 0;
         }
 
@@ -253,9 +326,8 @@ int32 lobbydata_parse(int32 fd)
 
                     std::memcpy(ReservePacketEmptyList + 12, Hash, sizeof(Hash));
                     sessions[sd->login_lobbyview_fd]->wdata.assign((const char*)ReservePacketEmptyList, SendBuffSize);
-
+                    LOG_WRITE_PACKET( "lobby-view-out", sd->login_lobbyview_fd);
                     RFIFOSKIP(sd->login_lobbyview_fd, sessions[sd->login_lobbyview_fd]->rdata.size());
-                    RFIFOFLUSH(sd->login_lobbyview_fd);
                     ShowWarning("lobbydata_parse: char:(%i) login during maintenance mode (0xA2). Sending error to client.", sd->accid);
                     // TODO: consider logging failed attempts during maintenance
                     return -1;
@@ -266,8 +338,8 @@ int32 lobbydata_parse(int32 fd)
                     // write into lobbydata
                     uList[1] = 0x10;
                     sessions[fd]->wdata.assign(uList, 0x148);
+                    LOG_WRITE_PACKET("lobby-data-out", fd);
                     RFIFOSKIP(fd, sessions[fd]->rdata.size());
-                    RFIFOFLUSH(fd);
                     ////////////////////////////////////////
 
                     unsigned char hash[16];
@@ -276,8 +348,8 @@ int32 lobbydata_parse(int32 fd)
                     std::memcpy(CharList + 12, hash, 16);
                     // write into lobbyview
                     sessions[sd->login_lobbyview_fd]->wdata.assign((const char*)CharList, 2272);
+                    LOG_WRITE_PACKET( "lobby-view-out", sd->login_lobbyview_fd);
                     RFIFOSKIP(sd->login_lobbyview_fd, sessions[sd->login_lobbyview_fd]->rdata.size());
-                    RFIFOFLUSH(sd->login_lobbyview_fd);
                 }
                 else // Cleanup
                 {
@@ -290,6 +362,7 @@ int32 lobbydata_parse(int32 fd)
                 break;
             }
             case 0xA2:
+            case 0xA3:
             {
                 LOBBY_A2_RESERVEPACKET(ReservePacket);
                 uint8 key3[20];
@@ -299,7 +372,6 @@ int32 lobbydata_parse(int32 fd)
                 uint8 MainReservePacket[0x48];
 
                 RFIFOSKIP(fd, sessions[fd]->rdata.size());
-                RFIFOFLUSH(fd);
 
                 if (sessions[sd->login_lobbyview_fd] == nullptr)
                 {
@@ -407,11 +479,12 @@ int32 lobbydata_parse(int32 fd)
                         char session_key[sizeof(key3) * 2 + 1];
                         bin2hex(session_key, key3, sizeof(key3));
 
-                        fmtQuery = "INSERT INTO accounts_sessions(accid,charid,session_key,server_addr,server_port,client_addr, version_mismatch) "
-                                   "VALUES(%u,%u,x'%s',%u,%u,%u,%u)";
+                        bool encrypt = code == 0xA2;
+                        fmtQuery = "INSERT INTO accounts_sessions(accid,charid,session_key,server_addr,server_port,client_addr, version_mismatch, encrypt) "
+                                   "VALUES(%u,%u,x'%s',%u,%u,%u,%u,%u)";
 
-                        if (sql->Query(fmtQuery, sd->accid, charid, session_key, ZoneIP, ZonePort, sd->client_addr,
-                                       (uint8)sessions[sd->login_lobbyview_fd]->ver_mismatch) == SQL_ERROR)
+                        if (sql->Query(fmtQuery, sd->accid, charid, session_key, ZoneIP, ZonePort, sd->client_addr, 
+                                       (uint8)sessions[sd->login_lobbyview_fd]->ver_mismatch, encrypt) == SQL_ERROR)
                         {
                             // Send error message to the client.
                             LOBBBY_ERROR_MESSAGE(ReservePacketError);
@@ -449,9 +522,8 @@ int32 lobbydata_parse(int32 fd)
 
                 std::memcpy(MainReservePacket + 12, Hash, sizeof(Hash));
                 sessions[sd->login_lobbyview_fd]->wdata.assign((const char*)MainReservePacket, SendBuffSize);
-
+                LOG_WRITE_PACKET("lobby-view-out", sd->login_lobbyview_fd);
                 RFIFOSKIP(sd->login_lobbyview_fd, sessions[sd->login_lobbyview_fd]->rdata.size());
-                RFIFOFLUSH(sd->login_lobbyview_fd);
 
                 if (SendBuffSize == 0x24)
                 {
@@ -495,6 +567,7 @@ int32 lobbydata_parse(int32 fd)
 
 int32 do_close_lobbydata(login_session_data_t* loginsd, int32 fd)
 {
+    log_connect(*sessions[fd], "data-close");
     if (loginsd != nullptr)
     {
         ShowInfo("lobbydata_parse: %s shutdown the socket", loginsd->login);
@@ -505,10 +578,10 @@ int32 do_close_lobbydata(login_session_data_t* loginsd, int32 fd)
         erase_loginsd_byaccid(loginsd->accid);
         ShowInfo("lobbydata_parse: %s's login_session_data is deleted", loginsd->login);
         do_close_tcp(fd);
-        return 0;
+    } else 
+    {
+        ShowInfo("lobbydata_parse: %s shutdown the socket", ip2str(sessions[fd]->client_addr));
     }
-
-    ShowInfo("lobbydata_parse: %s shutdown the socket", ip2str(sessions[fd]->client_addr));
     do_close_tcp(fd);
     return 0;
 }
@@ -521,6 +594,8 @@ int32 connect_client_lobbyview(int32 listenfd)
     {
         create_session(fd, recv_to_fifo, send_from_fifo, lobbyview_parse);
         sessions[fd]->client_addr = ntohl(client_address.sin_addr.s_addr);
+        sessions[fd]->client_port = client_address.sin_port;
+        log_connect(*sessions[fd], "view-open");
         return fd;
     }
     return -1;
@@ -529,6 +604,8 @@ int32 connect_client_lobbyview(int32 listenfd)
 int32 lobbyview_parse(int32 fd)
 {
     login_session_data_t* sd = (login_session_data_t*)sessions[fd]->session_data;
+    RFIFOFLUSH(fd);
+    LOG_READ_PACKET( "lobby-view-in", fd);
 
     if (sd == nullptr)
     {
@@ -634,9 +711,9 @@ int32 lobbyview_parse(int32 fd)
                 std::memcpy(MainReservePacket + 12, Hash, 16);
                 // Finalize the packet.
                 sessions[fd]->wdata.assign((const char*)MainReservePacket, sendsize);
+                LOG_WRITE_PACKET("lobby-view-out", fd);
                 sessions[fd]->ver_mismatch = ver_mismatch;
                 RFIFOSKIP(fd, sessions[fd]->rdata.size());
-                RFIFOFLUSH(fd);
             }
             break;
             case 0x14:
@@ -652,8 +729,8 @@ int32 lobbyview_parse(int32 fd)
                     std::memcpy(MainReservePacket, ReservePacket, sizeof(ReservePacket));
 
                     sessions[fd]->wdata.assign((const char*)MainReservePacket, sendsize);
+                    LOG_WRITE_PACKET("lobby-view-out", fd);
                     RFIFOSKIP(fd, sessions[fd]->rdata.size());
-                    RFIFOFLUSH(fd);
                     return -1;
                 }
 
@@ -672,8 +749,8 @@ int32 lobbyview_parse(int32 fd)
                 std::memcpy(ReservePacket + 12, hash, 16);
 
                 sessions[fd]->wdata.assign((const char*)ReservePacket, sendsize);
+                LOG_WRITE_PACKET("lobby-view-out", fd);
                 RFIFOSKIP(fd, sessions[fd]->rdata.size());
-                RFIFOFLUSH(fd);
 
                 // Perform character deletion from the database. It is sufficient to remove the
                 // value from the `chars` table. The mysql server will handle the rest.
@@ -699,6 +776,7 @@ int32 lobbyview_parse(int32 fd)
                 }
                 sessions[sd->login_lobbydata_fd]->wdata.resize(5);
                 ref<uint8>(sessions[sd->login_lobbydata_fd]->wdata.data(), 0) = 0x01;
+                LOG_WRITE_PACKET("lobby-data-out", sd->login_lobbydata_fd);
             }
             break;
             case 0x24:
@@ -715,8 +793,8 @@ int32 lobbyview_parse(int32 fd)
                 std::memcpy(ReservePacket + 12, Hash, 16);
                 uint8 SendBuffSize = 64;
                 sessions[fd]->wdata.append((const char*)ReservePacket, SendBuffSize);
+                LOG_WRITE_PACKET("lobby-view-out", fd);
                 RFIFOSKIP(fd, sessions[fd]->rdata.size());
-                RFIFOFLUSH(fd);
             }
             break;
             case 0x07:
@@ -736,6 +814,7 @@ int32 lobbyview_parse(int32 fd)
 
                 sessions[sd->login_lobbydata_fd]->wdata.resize(5);
                 ref<uint8>(sessions[sd->login_lobbydata_fd]->wdata.data(), 0) = 0x02;
+                LOG_WRITE_PACKET("lobby-data-out", sd->login_lobbydata_fd);
             }
             break;
             case 0x21:
@@ -761,8 +840,8 @@ int32 lobbyview_parse(int32 fd)
 
                 std::memcpy(ReservePacket + 12, hash, sizeof(hash));
                 sessions[fd]->wdata.assign((const char*)ReservePacket, sendsize);
+                LOG_WRITE_PACKET("lobby-view-out", fd);
                 RFIFOSKIP(fd, sessions[fd]->rdata.size());
-                RFIFOFLUSH(fd);
             }
             break;
             case 0x22:
@@ -838,8 +917,8 @@ int32 lobbyview_parse(int32 fd)
                 md5(MainReservePacket, hash, sendsize);
                 std::memcpy(MainReservePacket + 12, hash, 16);
                 sessions[fd]->wdata.assign((const char*)MainReservePacket, sendsize);
+                LOG_WRITE_PACKET("lobby-view-out", fd);
                 RFIFOSKIP(fd, sessions[fd]->rdata.size());
-                RFIFOFLUSH(fd);
             }
             break;
             default:
@@ -852,6 +931,7 @@ int32 lobbyview_parse(int32 fd)
 int32 do_close_lobbyview(login_session_data_t* sd, int32 fd)
 {
     ShowInfo("lobbyview_parse: %s shutdown the socket", sd->login);
+    log_connect(*sessions[fd], "view-close");
     do_close_tcp(fd);
     return 0;
 }

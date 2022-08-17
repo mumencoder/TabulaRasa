@@ -78,7 +78,9 @@
 #include <variant>
 #include <vector>
 
+#include "common/base64.h"
 #include "common/cbasetypes.h"
+#include "common/json.hpp"
 #include "common/kernel.h"
 #include "common/logging.h"
 #include "common/mmo.h"

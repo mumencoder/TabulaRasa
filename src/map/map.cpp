@@ -22,6 +22,7 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 #include "common/blowfish.h"
 #include "common/console_service.h"
 #include "common/logging.h"
+#include "common/kafka.h"
 #include "common/md52.h"
 #include "common/timer.h"
 #include "common/utils.h"
@@ -84,6 +85,8 @@ void operator delete(void* ptr) noexcept
     free(ptr);
 }
 #endif // TRACY_ENABLE
+
+int msg_id = 0;
 
 const char* MAP_CONF_FILENAME = nullptr;
 
@@ -162,14 +165,13 @@ map_session_data_t* mapsession_createsession(uint32 ip, uint16 port)
     map_session_list[ipp] = map_session_data;
 
     const char* fmtQuery = "SELECT charid FROM accounts_sessions WHERE inet_ntoa(client_addr) = '%s' LIMIT 1;";
-
     int32 ret = sql->Query(fmtQuery, ip2str(map_session_data->client_addr));
-
     if (ret == SQL_ERROR || sql->NumRows() == 0)
     {
         ShowError("recv_parse: Invalid login attempt from %s", ip2str(map_session_data->client_addr));
         return nullptr;
     }
+
     return map_session_data;
 }
 
@@ -178,43 +180,6 @@ map_session_data_t* mapsession_createsession(uint32 ip, uint16 port)
  *  do_init                                                              *
  *                                                                       *
  ************************************************************************/
-rd_kafka_t* kafka_producer;
-rd_kafka_conf_t* kafka_conf;
-
-#include "common/json.hpp"
-#include "common/base64.h"
-
-using nlohmann::json;
-
-void log_packet_in(map_session_data_t* const PSession, CCharEntity* const PChar, CBasicPacket data) {
-    if (data.getType() == 21) {
-        return;
-    }
-    json msg, session, packet;
-    session["client_addr"] = ip2str(PSession->client_addr);
-    session["client_port"] = PSession->client_port;
-    packet["type"] = data.getType();
-    packet["size"] = data.getSize();
-    packet["data"] = base64_encode( (uint8*)data, data.getSize() );
-    msg["session"] = session;
-    msg["packet"] = packet;
-    std::string msgStr = msg.dump();
-    rd_kafka_producev(kafka_producer,
-        RD_KAFKA_V_TOPIC("packets-in"),
-        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-        RD_KAFKA_V_KEY( (void*)"packet", strlen("packet")),
-        RD_KAFKA_V_VALUE( (void*)msgStr.c_str(), msgStr.length() ),
-        RD_KAFKA_V_END
-    );
-    rd_kafka_flush(kafka_producer, 50);
-}
-
-void kafka_init() {
-    char errstr[256];
-    kafka_conf = rd_kafka_conf_new();
-    rd_kafka_conf_set(kafka_conf, "bootstrap.servers", "broker:9092", errstr, sizeof(errstr));
-    kafka_producer = rd_kafka_new(RD_KAFKA_PRODUCER, kafka_conf, errstr, sizeof(errstr));
-}
 int32 do_init(int32 argc, char** argv)
 {
     TracyZoneScoped;
@@ -646,10 +611,8 @@ int32 recv_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_da
                 return -1;
             }
 
-            fmtQuery = "SELECT session_key FROM accounts_sessions WHERE charid = %u LIMIT 1;";
-
+            fmtQuery = "SELECT session_key, encrypt FROM accounts_sessions WHERE charid = %u LIMIT 1;";
             ret = sql->Query(fmtQuery, CharID);
-
             if (ret == SQL_ERROR || sql->NumRows() == 0 || sql->NextRow() != SQL_SUCCESS)
             {
                 ShowError("recv_parse: Cannot load session_key for charid %u", CharID);
@@ -658,8 +621,10 @@ int32 recv_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_da
             {
                 char* strSessionKey = nullptr;
                 sql->GetData(0, &strSessionKey, nullptr);
-
                 memcpy(map_session_data->blowfish.key, strSessionKey, 20);
+                map_session_data->encrypt = (bool)sql->GetUIntData(1);
+                ShowInfo("encrypt? %d", map_session_data->encrypt);
+                //map_session_data->encrypt = true;
             }
 
             // TODO: probably it is better to put the character creation into the charutils::LoadChar()
@@ -679,32 +644,34 @@ int32 recv_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_da
     }
     else
     {
-        // char packets
-        if (map_decipher_packet(buff, *buffsize, from, map_session_data) == -1)
+        if (map_session_data->encrypt) 
         {
-            *buffsize = 0;
-            return -1;
-        }
-        // reading data size
-        uint32 PacketDataSize = ref<uint32>(buff, *buffsize - sizeof(int32) - 16);
-        // creating buffer for decompress data
-        auto PacketDataBuff = std::make_unique<int8[]>(MAX_BUFFER_SIZE);
-        // it's decompressing data and getting new size
-        PacketDataSize = zlib_decompress(buff + FFXI_HEADER_SIZE, PacketDataSize, PacketDataBuff.get(), MAX_BUFFER_SIZE);
+            // char packets
+            if (map_decipher_packet(buff, *buffsize, from, map_session_data) == -1)
+            {
+                *buffsize = 0;
+                return -1;
+            }
+            // reading data size
+            uint32 PacketDataSize = ref<uint32>(buff, *buffsize - sizeof(int32) - 16);
+            // creating buffer for decompress data
+            auto PacketDataBuff = std::make_unique<int8[]>(MAX_BUFFER_SIZE);
+            // it's decompressing data and getting new size
+            PacketDataSize = zlib_decompress(buff + FFXI_HEADER_SIZE, PacketDataSize, PacketDataBuff.get(), MAX_BUFFER_SIZE);
 
-        // Not sure why zlib_decompress is defined to return a uint32 when it returns -1 in situations.
-        if (static_cast<int32>(PacketDataSize) != -1)
-        {
-            // it's making result buff
-            // don't need memcpy header
-            memcpy(buff + FFXI_HEADER_SIZE, PacketDataBuff.get(), PacketDataSize);
-            *buffsize = FFXI_HEADER_SIZE + PacketDataSize;
+            // Not sure why zlib_decompress is defined to return a uint32 when it returns -1 in situations.
+            if (static_cast<int32>(PacketDataSize) != -1)
+            {
+                // it's making result buff
+                // don't need memcpy header
+                memcpy(buff + FFXI_HEADER_SIZE, PacketDataBuff.get(), PacketDataSize);
+                *buffsize = FFXI_HEADER_SIZE + PacketDataSize;
 
+            }
             return 0;
         }
-
-        return 0;
     }
+    return 0;
 }
 
 /************************************************************************
@@ -712,6 +679,7 @@ int32 recv_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_da
  *  main function parsing the packets                                    *
  *                                                                       *
  ************************************************************************/
+
 
 int32 parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_data_t* map_session_data)
 {
@@ -809,12 +777,52 @@ int32 parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_data_t*
     return 0;
 }
 
+using nlohmann::json;
+
+void log_map_packet_out(map_session_data_t* const PSession, CCharEntity* const PChar, CBasicPacket data) {
+    json msg, session, packet, character;
+    character["name"] = (char*)PChar->GetName();
+    session["client_addr"] = ip2str(PSession->client_addr);
+    session["client_port"] = PSession->client_port;
+    packet["type"] = data.getType();
+    packet["size"] = data.getSize();
+    packet["data"] = base64_encode( (uint8*)data, data.getSize() );
+    msg["timestamp"] = time(nullptr);
+    msg["session"] = session;
+    msg["packet"] = packet;
+    msg["character"] = character;
+    msg["id"] = msg_id;
+    msg_id += 1;
+    std::string msgStr = msg.dump();
+    rd_kafka_producev(kafka_producer,
+        RD_KAFKA_V_TOPIC("packets-out"),
+        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+        RD_KAFKA_V_KEY( (void*)"packet", strlen("packet")),
+        RD_KAFKA_V_VALUE( (void*)msgStr.c_str(), msgStr.length() ),
+        RD_KAFKA_V_END
+    );
+    rd_kafka_flush(kafka_producer, 50);
+}
+
+std::string byte2hex(uint8 b) {
+    static char table[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+    std::string rval;
+    rval.push_back( table[(b & 0xF0) >> 4] );
+    rval.push_back( table[b & 0x0F] );
+    return rval;
+}
+std::string str2hex(char* buff, int size) {
+    std::string debugStr;
+    for(uint32 i = 0; i < size; i++) {
+        debugStr.append( byte2hex(buff[i]) );
+    }
+    return debugStr;
+}
 /************************************************************************
  *                                                                       *
  *  main function is building big packet                                 *
  *                                                                       *
  ************************************************************************/
-
 int32 send_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_data_t* map_session_data)
 {
     TracyZoneScoped;
@@ -857,6 +865,7 @@ int32 send_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_da
             while (!packetList.empty() && *buffsize + packetList.front()->getSize() < MAX_BUFFER_SIZE && static_cast<size_t>(packets) < PacketCount)
             {
                 PSmallPacket = packetList.front();
+                log_map_packet_out(map_session_data, PChar, *PSmallPacket);
                 packetList.pop_front();
 
                 PSmallPacket->setSequence(map_session_data->server_packet_id);
@@ -869,20 +878,24 @@ int32 send_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_da
 
             PacketCount -= PacketCount / 3;
 
-            // Compress the data without regard to the header
-            // The returned size is 8 times the real data
-            PacketSize = zlib_compress(buff + FFXI_HEADER_SIZE, (uint32)(*buffsize - FFXI_HEADER_SIZE), PTempBuff, MAX_BUFFER_SIZE);
+            if (map_session_data->encrypt) {
+                // Compress the data without regard to the header
+                // The returned size is 8 times the real data
+                PacketSize = zlib_compress(buff + FFXI_HEADER_SIZE, (uint32)(*buffsize - FFXI_HEADER_SIZE), PTempBuff, MAX_BUFFER_SIZE);
 
-            // handle compression error
-            if (PacketSize == static_cast<uint32>(-1))
-            {
-                ShowError("zlib compression error");
-                continue;
+                // handle compression error
+                if (PacketSize == static_cast<uint32>(-1))
+                {
+                    ShowError("zlib compression error");
+                    continue;
+                }
+
+                ref<uint32>(PTempBuff, zlib_compressed_size(PacketSize)) = PacketSize;
+
+                PacketSize = (uint32)zlib_compressed_size(PacketSize) + 4;
+            } else {
+                PacketSize = (uint32)(*buffsize - FFXI_HEADER_SIZE);
             }
-
-            ref<uint32>(PTempBuff, zlib_compressed_size(PacketSize)) = PacketSize;
-
-            PacketSize = (uint32)zlib_compressed_size(PacketSize) + 4;
 
         } while (PacketCount > 0 && PacketSize > 1300 - FFXI_HEADER_SIZE - 16); // max size for client to accept
 
@@ -915,17 +928,22 @@ int32 send_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_da
         ShowCritical("Memory manager: PTempBuff is overflowed (%u)", PacketSize);
     }
 
-    // Making total packet
-    memcpy(buff + FFXI_HEADER_SIZE, PTempBuff, PacketSize);
+    //ShowInfo("Debug zipped:\n%s", str2hex((char*)buff, PacketSize + FFXI_HEADER_SIZE) );
 
-    uint32 CypherSize = (PacketSize / 4) & -2;
-
-    blowfish_t* pbfkey = &map_session_data->blowfish;
-
-    for (uint32 j = 0; j < CypherSize; j += 2)
-    {
-        blowfish_encipher((uint32*)(buff) + j + 7, (uint32*)(buff) + j + 8, pbfkey->P, pbfkey->S[0]);
+    if (map_session_data->encrypt) {
+        // Making total packet
+        memcpy(buff + FFXI_HEADER_SIZE, PTempBuff, PacketSize);
+        uint32 CypherSize = (PacketSize / 4) & -2;
+        blowfish_t* pbfkey = &map_session_data->blowfish;
+        for (uint32 j = 0; j < CypherSize; j += 2)
+        {
+            blowfish_encipher((uint32*)(buff) + j + 7, (uint32*)(buff) + j + 8, pbfkey->P, pbfkey->S[0]);
+        }
     }
+    //ShowInfo("Debug key: %s", str2hex((char*)pbfkey->key, 20));
+    //ShowInfo("Debug hash: %s", str2hex((char*)pbfkey->hash, 16));
+    //ShowInfo("PEE BOXES: %s", str2hex((char*)pbfkey->P, 18*4));
+    //ShowInfo("Debug encrypted:\n%s", str2hex((char*)buff, PacketSize + FFXI_HEADER_SIZE));
 
     // Control the size of the sent packet.
     // if its size exceeds 1400 bytes (data size + 42 bytes IP header),

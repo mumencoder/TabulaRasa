@@ -34,7 +34,6 @@
 
 #include <list>
 #include <map>
-#include <rdkafka.h>
 
 #include "command_handler.h"
 #include "zone.h"
@@ -55,12 +54,15 @@ struct map_session_data_t
     size_t       server_packet_size = 0;       // the size of the packet that was previously sent to the client
     time_t       last_update        = 0;       // time of last packet recv
     blowfish_t   blowfish           = {};      // unique decypher keys
+    bool         encrypt            = true;
     CCharEntity* PChar              = nullptr; // game char
     uint8        shuttingDown       = 0;       // prevents double session closing
 };
 
 extern uint32 map_amntplayers;
 extern int32  map_fd;
+
+extern int msg_id;
 
 // 2.5 updates per second
 static constexpr float server_tick_rate = 2.5f;
@@ -81,17 +83,11 @@ extern std::unique_ptr<SqlConnection> sql;
 
 extern bool gLoadAllLua;
 
-extern rd_kafka_t* kafka_producer;
-extern rd_kafka_conf_t* kafka_conf;
-
 //=======================================================================
 
 int32 recv_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_data_t*); // main function to parse recv packets
 int32 parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_data_t*);      // main function parsing the packets
 int32 send_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_data_t*); // main function is building big packet
-
-void kafka_init();
-void log_packet_in(map_session_data_t* const PSession, CCharEntity* const PChar, CBasicPacket data);
 
 void map_helpscreen(int32 flag);
 
