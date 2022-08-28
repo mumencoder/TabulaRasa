@@ -62,8 +62,6 @@ struct map_session_data_t
 extern uint32 map_amntplayers;
 extern int32  map_fd;
 
-extern int msg_id;
-
 // 2.5 updates per second
 static constexpr float server_tick_rate = 2.5f;
 

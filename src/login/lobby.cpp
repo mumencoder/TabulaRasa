@@ -19,8 +19,6 @@
 ===========================================================================
 */
 
-#include "common/base64.h"
-#include "common/json.hpp"
 #include "common/kafka.h"
 #include "common/logging.h"
 #include "common/md52.h"
@@ -36,69 +34,6 @@
 
 int32 login_lobbydata_fd;
 int32 login_lobbyview_fd;
-
-using nlohmann::json;
-
-static int msg_id = 0;
-
-#define LOG_READ_PACKET(topic, fd) log_packet(topic, *sessions[fd], sessions[fd]->rdata.substr(0, RFIFOREST(fd)))
-#define LOG_WRITE_PACKET(topic, fd) log_packet(topic, *sessions[fd], sessions[fd]->wdata)
-
-json to_json(socket_data socket) {
-    json j;
-    j["client_addr"] = ip2str(socket.client_addr);
-    j["client_port"] = socket.client_port;
-    return j;
-}
-
-json to_json(login_session_data_t session) {
-    json j;
-    j["accid"] = session.accid;
-    j["login"] = session.login;
-    return j;
-}
-
-void log_connect(socket_data socket, const char* state) {
-    json msg;
-    msg["socket"] = to_json(socket); 
-    auto session = static_cast<login_session_data_t*>(socket.session_data);
-    if (session != NULL) {
-        msg["session"] = to_json(*session);
-    }
-    msg["state"] = state;
-    msg["id"] = msg_id;
-    msg_id += 1;
-    std::string msgStr = msg.dump();
-    rd_kafka_producev(kafka_producer,
-        RD_KAFKA_V_TOPIC("lobby-socket"),
-        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-        RD_KAFKA_V_KEY( (void*)"msg", strlen("msg")),
-        RD_KAFKA_V_VALUE( (void*)msgStr.c_str(), msgStr.length() ),
-        RD_KAFKA_V_END
-    );
-    rd_kafka_flush(kafka_producer, 50);
-}
-
-void log_packet(const char* topic, socket_data socket, std::string data) {
-    json msg;
-    msg["socket"] = to_json(socket);
-    auto session = static_cast<login_session_data_t*>(socket.session_data);
-    if (session != NULL) {
-        msg["session"] = to_json(*session);
-    }
-    msg["data"] = base64_encode( (unsigned char*)data.c_str(), data.length() );
-    msg["id"] = msg_id;
-    msg_id += 1;
-    std::string msgStr = msg.dump();
-    rd_kafka_producev(kafka_producer,
-        RD_KAFKA_V_TOPIC(topic),
-        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-        RD_KAFKA_V_KEY( (void*)"msg", strlen("msg")),
-        RD_KAFKA_V_VALUE( (void*)msgStr.c_str(), msgStr.length() ),
-        RD_KAFKA_V_END
-    );
-    rd_kafka_flush(kafka_producer, 50);
-}
 
 int32 connect_client_lobbydata(int32 listenfd)
 {

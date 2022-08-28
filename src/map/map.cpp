@@ -34,7 +34,6 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 #include <cstdlib>
 #include <cstring>
 #include <thread>
-#include <rdkafka.h>
 
 #include "ability.h"
 #include "job_points.h"
@@ -85,8 +84,6 @@ void operator delete(void* ptr) noexcept
     free(ptr);
 }
 #endif // TRACY_ENABLE
-
-int msg_id = 0;
 
 const char* MAP_CONF_FILENAME = nullptr;
 
@@ -777,47 +774,6 @@ int32 parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_data_t*
     return 0;
 }
 
-using nlohmann::json;
-
-void log_map_packet_out(map_session_data_t* const PSession, CCharEntity* const PChar, CBasicPacket data) {
-    json msg, session, packet, character;
-    character["name"] = (char*)PChar->GetName();
-    session["client_addr"] = ip2str(PSession->client_addr);
-    session["client_port"] = PSession->client_port;
-    packet["type"] = data.getType();
-    packet["size"] = data.getSize();
-    packet["data"] = base64_encode( (uint8*)data, data.getSize() );
-    msg["timestamp"] = time(nullptr);
-    msg["session"] = session;
-    msg["packet"] = packet;
-    msg["character"] = character;
-    msg["id"] = msg_id;
-    msg_id += 1;
-    std::string msgStr = msg.dump();
-    rd_kafka_producev(kafka_producer,
-        RD_KAFKA_V_TOPIC("packets-out"),
-        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-        RD_KAFKA_V_KEY( (void*)"packet", strlen("packet")),
-        RD_KAFKA_V_VALUE( (void*)msgStr.c_str(), msgStr.length() ),
-        RD_KAFKA_V_END
-    );
-    rd_kafka_flush(kafka_producer, 50);
-}
-
-std::string byte2hex(uint8 b) {
-    static char table[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
-    std::string rval;
-    rval.push_back( table[(b & 0xF0) >> 4] );
-    rval.push_back( table[b & 0x0F] );
-    return rval;
-}
-std::string str2hex(char* buff, int size) {
-    std::string debugStr;
-    for(uint32 i = 0; i < size; i++) {
-        debugStr.append( byte2hex(buff[i]) );
-    }
-    return debugStr;
-}
 /************************************************************************
  *                                                                       *
  *  main function is building big packet                                 *
