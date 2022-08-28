@@ -208,34 +208,6 @@ void PrintPacket(CBasicPacket data)
     }
 }
 
-using nlohmann::json;
-
-
-void log_map_packet_in(map_session_data_t* const PSession, CCharEntity* const PChar, CBasicPacket data) {
-    json msg, session, packet, character;
-    character["name"] = (char*)PChar->GetName();
-    session["client_addr"] = ip2str(PSession->client_addr);
-    session["client_port"] = PSession->client_port;
-    packet["type"] = data.getType();
-    packet["size"] = data.getSize();
-    packet["data"] = base64_encode( (uint8*)data, data.getSize() );
-    msg["id"] = msg_id;
-    msg_id += 1;
-    msg["character"] = character;
-    msg["timestamp"] = time(nullptr);
-    msg["session"] = session;
-    msg["packet"] = packet;
-    std::string msgStr = msg.dump();
-    rd_kafka_producev(kafka_producer,
-        RD_KAFKA_V_TOPIC("packets-in"),
-        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-        RD_KAFKA_V_KEY( (void*)"packet", strlen("packet")),
-        RD_KAFKA_V_VALUE( (void*)msgStr.c_str(), msgStr.length() ),
-        RD_KAFKA_V_END
-    );
-    rd_kafka_flush(kafka_producer, 50);
-}
-
 /************************************************************************
  *                                                                       *
  *  Unknown Packet                                                       *
@@ -7793,13 +7765,21 @@ void SmallPacket0x11D(map_session_data_t* const PSession, CCharEntity* const PCh
 void SmallPacket0x182(map_session_data_t* const PSession, CCharEntity* const PChar, CBasicPacket data)
 {
     CPathFind pathFind = CPathFind(PChar);
-    position_t to;
 
-    to.x = data.ref<float>(0x04);
-    to.y = data.ref<float>(0x08);
-    to.z = data.ref<float>(0x0C);
+    uint16 path_type = data.ref<uint16>(0x04);
 
-    pathFind.PathTo(to, 0, false);
+    position_t p;
+    p.x = data.ref<float>(0x06);
+    p.y = data.ref<float>(0x0A);
+    p.z = data.ref<float>(0x0E);
+    if (path_type == 1003) {
+        pathFind.PathTo(p, 0, false);
+    }
+    else if (path_type == 3432) {
+        float max_dist = data.ref<float>(0x12);
+        uint8 turns = data.ref<uint8>(0x16);
+        pathFind.RoamAround(p, max_dist, turns, 0);
+    }
     PChar->pushPacket(new CPathResultPacket(pathFind));
 }
 
