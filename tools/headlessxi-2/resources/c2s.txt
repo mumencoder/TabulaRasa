@@ -70,13 +70,13 @@
 0x0DB - set chat/language filters
 0x0DC - set name flags
 0x0DD - check target
-0x0DE - set message - bazaar
-0x0E0 - set message - search
+0x0DE - set message: bazaar
+0x0E0 - set message: search
 0x0E1 - request linkshell message
 0x0E2 - update linkshell message
 0x0E7 - request exit game
-0x0E8 - command - /heal
-0x0EA - command - /sit
+0x0E8 - command: /heal
+0x0EA - command: /sit
 0x0EB - request special release
 0x0F1 - cancel status effect
 0x0F2 - update player zone boundary
@@ -91,12 +91,12 @@
 0x0FF - mog house dry flowerpot
 0x100 - job change
 0x102 - set blue magic spells
-0x104 - bazaar shop - leave
-0x105 - bazaar shop - browse
-0x106 - bazaar shop - purchase
-0x109 - bazaar shop - exit price editor
-0x10A - bazaar shop - set price
-0x10B - bazaar shop - open price editor
+0x104 - bazaar shop: leave
+0x105 - bazaar shop: browse
+0x106 - bazaar shop: purchase
+0x109 - bazaar shop: exit price editor
+0x10A - bazaar shop: set price
+0x10B - bazaar shop: open price editor
 0x10C - start RoE
 0x10D - drop RoE
 0x10E - claim RoE
@@ -104,11 +104,11 @@
 0x110 - fishing action (new)
 0x111 - request style lock
 0x112 - request RoE log
-0x113 - command - /sitchair
+0x113 - command: /sitchair
 0x114 - request map markers
 0x115 - request currency2 data
 0x116 - unity menu
 0x117 - unity rankings
 0x118 - unity chat on/off
 0x11B - job master display
-0x11D - command - /jump
+0x11D - command: /jump

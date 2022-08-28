@@ -1,6 +1,30 @@
 
 import struct
 
+def unpack_bits(data, offset, nbits):
+    current_byte = int(offset / 8)
+    value = data[current_byte]
+    current_bit = current_byte * 8
+    while current_bit != offset:
+        value = value >> 1
+        current_bit += 1
+    bit = 1
+    result = 0
+    while nbits != 0:
+        result += (value & 1) * bit
+        bit = bit << 1
+        nbits -= 1
+        value = value >> 1
+        current_bit += 1
+        if current_bit % 8 == 0:
+            current_byte += 1
+            if nbits == 0:
+                break
+            if current_byte >= len(data):
+                return None
+            value = data[current_byte]
+    return result
+
 def unpack_uint16(data, offset):
     return struct.unpack_from('<H', data, offset)[0]
 

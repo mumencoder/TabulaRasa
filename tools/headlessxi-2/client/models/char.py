@@ -9,11 +9,25 @@ class Char(object):
         self.state = CharState()
         self.state.last_loc_update = time.time()
 
+        self.animation = None
+
         self.zone = None
         self.rot = None
         self.x = None
         self.y = None
         self.z = None
+
+        self.job_unlocked = None
+        self.job_levels = None
+
+        self.mjob = None
+        self.sjob = None
+
+        self.mlvl = None
+        self.slvl = None
+
+        self.mlvls = None
+        self.slvls = None
 
         self.hp = None
         self.mp = None
@@ -39,17 +53,36 @@ class Char(object):
         self.chr = None
         self.chrplus = None
 
-        self.target_id = 0
+        self.target_id = None
 
-        self.equip = {}
-        self.inventory = {}
+        self.equip = {} # equip_slot : {"inv_slot", "container"}
+        self.inventory = {} # (containerID, slotID) : {"id", "quantity"}
 
         self.inventory_sizes = {}
 
-    def get_point(self):
-        return Point(self.x, self.y, self.z)
+    def log(self, msg, **kwargs):
+        pass
+        #print(msg, kwargs)
 
-    def updateAttrs( self, attrs):
+    def get_point(self):
+        return util.Point(self.x, self.y, self.z)
+        
+    def equipped_item(self, slot_id):
+        if slot_id not in self.equip:
+            return None
+        loc = self.equip[slot_id]
+        key =  (loc["container"], loc["inv_slot"]) 
+        if key not in self.inventory:
+            self.log(f"item not found", loc=key, equip=self.equip, inventory=self.inventory)
+            return None
+        return self.inventory[key]
+
+    def find_item(self, item_id):
+        for loc, item in self.inventory.items():
+            if item["id"] == item_id:
+                return loc
+
+    def updateAttrs(self, attrs):
         for key, value in attrs.items():
             if not hasattr(self, key):
                 raise Exception("attempt to set invalid attr", key)

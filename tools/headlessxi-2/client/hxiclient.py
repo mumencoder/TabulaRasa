@@ -1,225 +1,268 @@
 
 from common import *
 
-import config
-from packets import *
-import util
-
-from .packets_in import *
-from .packets_out import *
+from .packets import *
+from .goals import *
 from .tasks import *
 from .models import *
 
 class HXIClientState(object):
-    pass
+    attrs = {
+        "is_downloading":{},
+        "last_loc_update":{},
+        "pathfind_points":{},
+        "pathfind_failed":{},
+        "zoned_confirm":{},
+        "attackable":{},
+        "out_of_range":{},
+        "msg_too_far":{},
+        "unable_to_see":{},
+        "fite_entity":{},
+        "wanna_fite":{},
+        "ded_handled":{},
+        "logged_in":{"default":False},
+        "wait_longer":{},
+        "lost_sight":{},
+        "gear_checked":{"default":False}
+    }
 
-class Goal(object):
-    def __init__(self, name):
-        self.created = time.time()
-        self.name = name
+    def __init__(self):
+        for attr, info in self.attrs.items():
+            if "default" in info:
+                setattr(self, attr, info["default"])
+            else:
+                setattr(self, attr, None)
 
-class MoveGoal(Goal):
-    def __init__(self, name, final_destination):
-        super().__init__(name)
-        self.final_destination = final_destination
-        self.move_destination = None
-        self.sent_packet = False
-        self.pathfind_failed = False
-
-class HXIClient(ClientPacketsIn, ClientPacketsOut, ClientTasks):
-    def __init__(self, account, server_host, client_ver=''):
-        self.running = True
+class HXIClient(ClientPacketsIn, ClientPacketsOut, ClientTasks, ClientGoals, ClientLobby):
+    def __init__(self, himi, client_id, account, server_host, client_ver='', full_debug=False):
+        self.himi = himi
         self.account = account
         self.server_host = server_host
-        self.connected = False
-        self.starting_key = [0x00000000, 0x00000000, 0x00000000, 0x00000000, 0xAD5DE056]
-        self.send_key = bytearray(0)*20
         if client_ver == '':
             self.client_ver = self.get_client_ver()
         else:
             self.client_ver = "30220705_0" 
+        self.full_debug = full_debug
 
-        self.waypoints = []
+        self.running = True
 
-        self.created_chars = []
-        self.is_new_char = None
+        self.char = None
 
-        self.current_char = None
-
-        self.char = model.Char()
-        self.other_chars = {}
-        self.entities = {}
-
-        self.timers = {}
         self.processing_timers = True
+        self.timers = {}
 
-        self.task_queue = collections.deque()
         self.processing_tasks = True
+        self.task_queue = collections.deque()
 
-        self.goals = [Goal("login")]
-        self.last_goal = None
         self.processing_goals = True
+        self.goals = [Goal("idle")]
+        self.last_goal_name = None
 
+        self.processing_in_packets = True
         self.in_packet_queue = collections.deque()
         self.packet_watchers = {}
-        self.processing_packets = True
-
-        self.state = HXIClientState()
-        self.state.is_downloading = False
-        self.state.zoned_confirm = False
-        self.state.last_loc_update = time.time()
-
-        self.map_socket = None
-        self.map_addr = None
         self.init_packets_in()
 
-        self.add_task( self.do_account_login() )
+        self.processing_out_packets = True
+        self.out_packet_queue = collections.deque()
+
+        self.state = HXIClientState()
+
+        self.login_conn = None
+        self.data_conn = None
+        self.view_conn = None
+        self.map_socket = None
+        self.map_addr = None
+
+        self.aggro_history = util.Cache()
+        self.aggro_entities = []
+        self.recent_entities = util.SetCache()
+        self.claimed_targets = util.SetCache()
+        
+        self.local_host = f"172.31.176.{client_id}"
+
+        # TODO: add a gear check/equip timer
+        self.add_timer("gearcheck", action=self.clear_gear_check, interval=60*20)
+        self.add_timer("cache_expire", action=self.cache_expire, interval=60)
+        self.add_timer("find_checkable", action=self.find_check_target, interval=15)
+        self.add_timer("aggro_check", action=self.check_aggro, interval=2)
+        self.add_timer("find_fiteable", action=self.find_fite_target, interval=1)
+        
+    def log(self, **kwargs):
+        if self.full_debug is True:
+            print(kwargs)
 
     async def update(self):
-        if self.processing_packets is True:
-            self.do_next_packet()
+        if self.processing_in_packets is True:
+            self.process_in_packets()
         if self.processing_tasks is True:
-            await self.do_next_task()
+            await self.process_tasks()
         if self.processing_timers is True:
             self.process_timers()
         if self.processing_goals is True:
-            self.process_goals()
+            await self.process_goals()
+        if self.processing_out_packets is True:
+            self.process_out_packets()
 
-    async def check_packet_sizeheader(self, stream):
-        sizebytes = await stream.readexactly(4)
-        size = util.unpack_uint32(sizebytes, 0)
-        if size > 4096:
-            raise Exception("bad view response size")
-        response = await stream.readexactly(size - 4)
-        if util.unpack_str(response, 0, 4) != 'IXFF':
-            raise Exception("bad view response header", util.unpack_str(response, 0, 4))
-        return sizebytes + response
+    def add_task(self, task):
+        if self.full_debug is True:
+            print(task)
+        self.task_queue.append( task )
+
+    async def process_tasks(self):
+        while len(self.task_queue) > 0:
+            self.current_task = self.task_queue[0]
+            self.task_queue.popleft()
+            await self.current_task
 
     def add_timer(self, name, action=None, interval=None, do_now=False):
-        timer = {}
-        timer["name"] = name
-        timer["interval"] = interval
-        timer["action"] = action
-        timer["last_tick"] = 0 if do_now else time.time()
-
+        timer = Object(name=name, interval=interval, action=action, last_tick=(0 if do_now else time.time()) )
         self.timers[name] = timer
 
-    def direction(self, p1, p2):
-        return self.norm( self.sub(p1, p2) )
-
-    def smul(self, s, p):
-        return Point( s*p.x, s*p.y, s*p.z )
-
-    def add(self, p1, p2):
-        return Point( p1.x + p2.x, p1.y + p2.y, p1.z + p2.z)
-
-    def sub(self, p1, p2):
-        return Point( p1.x - p2.x, p1.y - p2.y, p1.z - p2.z)
-
-    def nav_dist(self, p1, p2):
-        if abs(p1.y - p2.y) < 3:
-            return math.sqrt( (p1.x-p2.x)**2 + (p1.z-p2.z)**2 )
-        else:
-            return self.dist(p1, p2)
-
-    def dist(self, p1, p2):
-        return math.sqrt( (p1.x-p2.x)**2 + (p1.y-p2.y)**2 + (p1.z-p2.z)**2 )
-
-    def norm(self, p):
-        N = self.dist(p, Point(0.0, 0.0, 0.0))
-        return Point( p.x / N, p.y / N, p.z / N)
+    def remove_timer(self, name):
+        del self.timers[name]
 
     def process_timers(self):
-        for key, timer in self.timers.items():
+        for key, timer in dict(self.timers).items():
             try:
-                if timer["last_tick"] + timer["interval"] < time.time():
-                    timer["action"]()
-                    timer["last_tick"] = time.time()
+                if timer.last_tick + timer.interval < time.time():
+                    timer.action()
+                    timer.last_tick = time.time()
             except:
-                print( "timer error: ", timer["name"] )
-                print( traceback.print_exc() )
+                self.log(msg="timer error", timer=timer, traceback=traceback.print_exc() )
 
-    def process_goals(self):
-        top_goal = self.goals[-1]
-        if self.last_goal is not None:
-            if self.goals[-1].name != self.last_goal.name:
-                print("goal:", self.goals[-1].name)
-        self.last_goal = self.goals[-1]
+    def process_in_packets(self):
+        while len(self.in_packet_queue) > 0:
+            self.current_packet = self.in_packet_queue[0]
+            self.in_packet_queue.popleft()
+            self.process_in_packet(self.current_packet)
 
-        if self.state.is_downloading:
-            pass
-        elif top_goal.name == "fite":
-            if self.char.zone in self.server.town_zones:
-                self.goals.append( Goal("leave_town") )
+    def process_out_packets(self):
+        while len(self.out_packet_queue) > 0:
+            conn, data = self.out_packet_queue[0]
+            self.out_packet_queue.popleft()
+            self.process_out_packet(conn, data)
+
+    def add_packet_watcher(self, ty, action):
+        if ty not in self.packet_watchers:
+            self.packet_watchers[ty] = [action]
+        else:
+            self.packet_watchers[ty].append( action )
+
+    def process_in_packet(self, packet):
+        if packet["type"] not in self.packet_watchers:
+            self.log(msg=f"unprocessed packet", packet=packet)
+        else:
+            for watcher in self.packet_watchers[packet["type"]]:
+                watcher(packet["data"])
+
+    def process_out_packet(self, conn, data):
+        conn.sendto( data )
+
+    def find_check_target(self):
+        for entity_id in self.recent_entities.items():
+            entity = self.himi.entities[entity_id]
+            if not self.entity_nearby(entity):
+                continue
+            if entity.level is None:
+                self.send_map_packet( self.command_check(entity) )
+        return None
+
+    def entity_nearby(self, entity):
+        if entity.loc is not None and util.Point.nav_dist(self.char.get_point(), entity.loc) > 100:
+            return False
+        return True
+
+    def entity_huntable(self, entity):
+        hunt_lvls = self.himi.exp_hunt[ self.char.mlvl ]
+        if entity.level is None:
+            return False
+        return hunt_lvls.lo <= entity.level and entity.level <= hunt_lvls.hi
+
+    def can_engage_entity(self, entity):
+        if entity.zone != self.char.zone:
+            return False
+        if entity.target_id is None:
+            return False
+        if entity.hpp is not None and not entity.hpp > 0:
+            return False
+        if entity.alive is False:
+            return False
+        if entity.id in self.claimed_targets:
+            return False
+        if entity.attackable is False:
+            return False
+        return True
+
+    def want_engage_entity(self, entity):
+        if not self.can_engage_entity(entity):
+            return False
+        if not self.entity_nearby(entity):
+            return False
+        if not self.entity_huntable(entity):
+            return False
+        if entity.attackable is None:
+            return True
+        if entity.attackable is True:
+            return True
+        return False
+
+    def find_fite_target(self):
+        if self.state.wanna_fite is not None:
+            if not self.want_engage_entity(self.state.wanna_fite):
+                self.state.wanna_fite = None
+        for entity_id in self.recent_entities.items():
+            entity = self.himi.entities[entity_id]
+            if self.want_engage_entity(entity):
+                self.state.wanna_fite = entity
                 return
-        elif top_goal.name == "leave_town":
-            if self.char.zone not in self.server.town_zones:
-                self.goals.pop()
-                return
-            for zone_link, zoneline in self.server.zone_links.items():
-                if zone_link[0] not in self.server.town_zones and zone_link[1] == self.char.zone:
-                    if self.nav_dist( self.char.get_point(), zoneline["loc"]) < 5:
-                        self.goals.append( Goal("idle") )
-                        self.state.zoned_confirm = False
-                        zone_link = (zone_link[1],zone_link[0])
-                        self.add_task( self.request_zone( self.server.zone_links[zone_link]["id"] ) )
-                    else:
-                        self.goals.append( MoveGoal("move.wait_for_directions", zoneline["loc"]) )
-        elif top_goal.name == "idle":
-            if self.state.zoned_confirm:
-                self.goals[-1] = Goal("fite") # kitty only knows fite
-        elif top_goal.name == "login":
-            if self.state.zoned_confirm:
-                self.goals[-1] = Goal("idle")
-        elif top_goal.name == "move.random":
-            self.goals[-1] = MoveGoal("move.wait_for_directions", self.get_random_destination())
-        elif top_goal.name == "move.wait_for_directions":
-            if top_goal.pathfind_failed:
-                self.goals.pop()
-            elif self.nav_dist( self.char.get_point(), top_goal.final_destination ) < 2:
-                self.goals.pop()
-            elif top_goal.move_destination is not None:
-                self.goals.append( Goal("move.moving") )
-            elif top_goal.sent_packet is False:
-                self.send_map_packet( self.Client.path_request(top_goal.final_destination) )
-                top_goal.sent_packet = time.time()
-            elif top_goal.sent_packet + 10 < time.time():
-                top_goal.sent_packet = False
-        elif top_goal.name == "move.moving":
-            if self.nav_dist( self.char.get_point(), self.goals[-2].move_destination ) < 2:
-                self.goals[-2].move_destination = None
-                self.goals.pop()
+
+    def get_attack_approach(self, entity):
+        if entity.loc is None:
+            return self.char.get_point()
+        n = util.Point.direction( entity.loc, self.char.get_point() ) 
+        approach = util.Point.add( entity.loc, util.Point.neg( util.Point.smul(0.3,n) ) )
+        return approach
+
+    def gear_check(self):
+        desired_equip = self.himi.gear_optimizer.optimize( [i["id"] for i in self.char.inventory.values()], self.char.mlvl, self.char.mjob )
+        return desired_equip
+
+    def equip_gear(self, desired_equip):
+        for slot_id, equipment in desired_equip.items():
+            equipped = self.char.equipped_item(slot_id)
+            loc = self.char.find_item( equipment["id"] )
+            if equipped is None:
+                self.send_map_packet( self.gear_change(loc, slot_id) )
+            elif equipped["id"] == equipment["id"]:
+                continue
             else:
-                max_dist = self.dist( self.char.get_point(), self.goals[-2].move_destination )
-                elapsed = time.time() - self.char.state.last_loc_update
-                distance_travelled = elapsed * self.char.speed * 0.10
+                self.send_map_packet( self.gear_change(loc, slot_id) )
 
-                n = self.direction( self.goals[-2].move_destination, self.char.get_point() ) 
-                new_loc = self.add( self.char.get_point(), self.smul( min(max_dist, distance_travelled), n ) )
-                print(new_loc.x, new_loc.y, new_loc.z)
-                self.char.x = new_loc.x
-                self.char.y = new_loc.y
-                self.char.z = new_loc.z
-                self.char.state.last_loc_update = time.time()
+    def cache_expire(self):
+        self.claimed_targets.expire(t=time.time()-5*60)
+        self.recent_entities.trim(128)
+        self.aggro_history.trim(32)
+        self.aggro_history.expire(t=time.time()-30)
 
-    def get_random_destination(self):
-        return (self.char.x + random.randint(-10,10), self.char.y, self.char.z + random.randint(-10,10) )
+    def clear_gear_check(self):
+        self.state.gear_checked = False
 
-    async def write_with_response(self, writer, reader, packet):
-        await write_now(writer, packet)
-        response = await self.check_packet_sizeheader( reader )
-        return response
+    def reset_aggro(self):
+        self.aggro_entities = []
+        self.aggro_history.clear()
 
-    def get_packet_code(self, packet):
-        return util.unpack_uint32(packet, 8)
+    def attack_ready(self):
+        if self.char.hpp == 0:
+            return False
+        if self.scan_goals( ["fite.wait_engage", 'fite.attack', 'fite.engaged', 'resting', 'move.homepoint'] ):
+            return False
+        return True
 
-    def get_client_ver(self):
-        with open(os.path.join(config.source_dir, 'settings/default/login.lua')) as f:
-            settings_file = f.read()
-            client_str = re.search(r'CLIENT_VER = "(.*?)"', settings_file)[1]
-        return client_str
-
-    def get_char(self, cid):
-        if cid not in self.other_chars:
-            self.other_chars[cid] = model.Char()
-        return self.other_chars[cid]
+    def check_aggro(self):
+        self.aggro_entities = []
+        for act in self.aggro_history.items():
+            if act.name == "attack" and act.target == self.char.id:
+                entity = self.himi.entities[act.actor]
+                if self.can_engage_entity(entity):
+                    self.aggro_entities.append( entity )
