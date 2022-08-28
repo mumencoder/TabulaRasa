@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS `exp_table` (
 --
 -- Contenu de la table `exp_table`
 --
-
+--                                  r1   r2   r3   r4   r5   r6   r7   r8   r9   r10
 INSERT INTO `exp_table` VALUES (15, 800, 800, 800, 800, 800, 800, 800, 800, 800, 800, 800, 800, 800, 800, 800, 800, 800, 800, 800, 1500);
 INSERT INTO `exp_table` VALUES (14, 800, 800, 800, 800, 800, 800, 800, 800, 800, 800, 800, 800, 720, 720, 720, 720, 720, 720, 720, 1500);
 INSERT INTO `exp_table` VALUES (13, 800, 800, 800, 800, 800, 800, 720, 720, 720, 720, 720, 720, 630, 630, 630, 630, 630, 630, 630, 1500);

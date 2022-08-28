@@ -12,6 +12,7 @@ services:
       MYSQL_DATABASE: xidb
     networks:
       - lsb
+      - web
     # Run all the .sql files in the /sql directory to initalize the DB. This only hapens the first time this service is started and will not handle additions/modifications
     volumes:
       - ./sql:/docker-entrypoint-initdb.d
@@ -38,30 +39,14 @@ services:
       - broker
     networks:
       - lsb
-    labels:
-      - "traefik.enable=true"
-
-      - "traefik.tcp.routers.connect1.rule=HostSNI(`*`)"
-      - "traefik.tcp.routers.connect1.entrypoints=connect1"
-      - "traefik.tcp.routers.connect1.service=svc_connect1"
-      - "traefik.tcp.services.svc_connect1.loadbalancer.server.port=54230"
-
-      - "traefik.tcp.routers.connect2.rule=HostSNI(`*`)"
-      - "traefik.tcp.routers.connect2.entrypoints=connect2"
-      - "traefik.tcp.routers.connect2.service=svc_connect2"
-      - "traefik.tcp.services.svc_connect2.loadbalancer.server.port=54231"
-
-      - "traefik.tcp.routers.connect3.rule=HostSNI(`*`)"
-      - "traefik.tcp.routers.connect3.entrypoints=connect3"
-      - "traefik.tcp.routers.connect3.service=svc_connect3"
-      - "traefik.tcp.services.svc_connect3.loadbalancer.server.port=54001"
-
-      - "traefik.tcp.routers.search.rule=HostSNI(`*`)"
-      - "traefik.tcp.routers.search.entrypoints=search"
-      - "traefik.tcp.routers.search.service=svc_search"
-      - "traefik.tcp.services.svc_search.loadbalancer.server.port=54002"
+      - web
     volumes:
       - /media/dream/lsb-build:/lsb-build
+    ports:
+      - "54231:54231/tcp"
+      - "54230:54230/tcp"
+      - "54001:54001/tcp"
+      - "54002:54002/tcp"
 
   ffxi_server_map1:
     depends_on:
@@ -79,22 +64,12 @@ services:
       /bin/bash -c 'dockerize --wait tcp://ffxi_server_main:54001 --timeout 2h -wait-retry-interval 20s && python3 ./tools/docker/launch_map.py'
     networks:
       - lsb
-    labels:
-      - "traefik.enable=true"
-
-      - "traefik.udp.routers.map1udp.entrypoints=map1udp"
-      - "traefik.udp.routers.map1udp.service=svc_map1udp"
-      - "traefik.udp.services.svc_map1udp.loadbalancer.server.port=22220"
-      - "traefik.udp.routers.map2udp.entrypoints=map2udp"
-      - "traefik.udp.routers.map2udp.service=svc_map2udp"
-      - "traefik.udp.services.svc_map2udp.loadbalancer.server.port=22221"
-      - "traefik.udp.routers.map3udp.entrypoints=map3udp"
-      - "traefik.udp.routers.map3udp.service=svc_map3udp"
-      - "traefik.udp.services.svc_map3udp.loadbalancer.server.port=22222"
-      - "traefik.udp.routers.map4udp.entrypoints=map4udp"
-      - "traefik.udp.routers.map4udp.service=svc_map4udp"
-      - "traefik.udp.services.svc_map4udp.loadbalancer.server.port=22223"
-
+      - web
+    ports:
+      - "22220:22220/udp"
+      - "22221:22221/udp"
+      - "22222:22222/udp"
+      - "22223:22223/udp"
     volumes:
       - /media/dream/lsb-build:/lsb-build
 
@@ -114,93 +89,14 @@ services:
       /bin/bash -c 'dockerize --wait tcp://ffxi_server_main:54001 --timeout 2h -wait-retry-interval 20s && python3 ./tools/docker/launch_map.py'
     networks:
       - lsb
-    labels:
-      - "traefik.enable=true"
-
-      - "traefik.udp.routers.map5udp.entrypoints=map5udp"
-      - "traefik.udp.routers.map5udp.service=svc_map5udp"
-      - "traefik.udp.services.svc_map5udp.loadbalancer.server.port=22230"
-      - "traefik.udp.routers.map6udp.entrypoints=map6udp"
-      - "traefik.udp.routers.map6udp.service=svc_map6udp"
-      - "traefik.udp.services.svc_map6udp.loadbalancer.server.port=22231"
-      - "traefik.udp.routers.map7udp.entrypoints=map7udp"
-      - "traefik.udp.routers.map7udp.service=svc_map7udp"
-      - "traefik.udp.services.svc_map7udp.loadbalancer.server.port=22232"
-      - "traefik.udp.routers.map8udp.entrypoints=map8udp"
-      - "traefik.udp.routers.map8udp.service=svc_map8udp"
-      - "traefik.udp.services.svc_map8udp.loadbalancer.server.port=22233"
-    volumes:
-      - /media/dream/lsb-build:/lsb-build
-
-  traefik:
-    depends_on:
-      - ffxi_server_map1
-      - ffxi_server_map2
-    image: traefik
-    restart: unless-stopped
-    environment:
-      TRAEFIK_API_DASHBOARD: false
-      TRAEFIK_API_INSECURE: false
-
-      TRAEFIK_ENTRYPOINTS_MAP1UDP: true
-      TRAEFIK_ENTRYPOINTS_MAP1UDP_ADDRESS: ":22220/udp"
-      TRAEFIK_ENTRYPOINTS_MAP2UDP: true
-      TRAEFIK_ENTRYPOINTS_MAP2UDP_ADDRESS: ":22221/udp"
-      TRAEFIK_ENTRYPOINTS_MAP3UDP: true
-      TRAEFIK_ENTRYPOINTS_MAP3UDP_ADDRESS: ":22222/udp"
-      TRAEFIK_ENTRYPOINTS_MAP4UDP: true
-      TRAEFIK_ENTRYPOINTS_MAP4UDP_ADDRESS: ":22223/udp"
-      TRAEFIK_ENTRYPOINTS_MAP5UDP: true
-      TRAEFIK_ENTRYPOINTS_MAP5UDP_ADDRESS: ":22230/udp"
-      TRAEFIK_ENTRYPOINTS_MAP6UDP: true
-      TRAEFIK_ENTRYPOINTS_MAP6UDP_ADDRESS: ":22231/udp"
-      TRAEFIK_ENTRYPOINTS_MAP7UDP: true
-      TRAEFIK_ENTRYPOINTS_MAP7UDP_ADDRESS: ":22232/udp"
-      TRAEFIK_ENTRYPOINTS_MAP8UDP: true
-      TRAEFIK_ENTRYPOINTS_MAP8UDP_ADDRESS: ":22233/udp"
-      TRAEFIK_ENTRYPOINTS_CONNECT1: true
-      TRAEFIK_ENTRYPOINTS_CONNECT1_ADDRESS: ":54230/tcp"
-      TRAEFIK_ENTRYPOINTS_CONNECT2: true
-      TRAEFIK_ENTRYPOINTS_CONNECT2_ADDRESS: ":54231/tcp"
-      TRAEFIK_ENTRYPOINTS_CONNECT3: true
-      TRAEFIK_ENTRYPOINTS_CONNECT3_ADDRESS: ":54001/tcp"
-      TRAEFIK_ENTRYPOINTS_SEARCH: true
-      TRAEFIK_ENTRYPOINTS_SEARCH_ADDRESS: ":54002/tcp"
-      TRAEFIK_ENTRYPOINTS_API: true
-      TRAEFIK_ENTRYPOINTS_API_ADDRESS: ":80/tcp"
-
-      TRAEFIK_PROVIDERS_DOCKER: true
-      TRAEFIK_PROVIDERS_DOCKER_WATCH: true
-      TRAEFIK_PROVIDERS_DOCKER_NETWORK: "web"
-      TRAEFIK_PROVIDERS_DOCKER_EXPOSEDBYDEFAULT: false
-
+      - web
     ports:
-      - "54231:54231/tcp"
-      - "54230:54230/tcp"
-      - "54001:54001/tcp"
-      - "54002:54002/tcp"
-      - "22220:22220/udp"
-      - "22221:22221/udp"
-      - "22222:22222/udp"
-      - "22223:22223/udp"
       - "22230:22230/udp"
       - "22231:22231/udp"
       - "22232:22232/udp"
       - "22233:22233/udp"
-      - "80:80"
-      - "8080:8080"    
     volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-    networks:
-      - web
-      - lsb
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.api.entryPoints=traefik"
-      - "traefik.http.routers.api.rule=PathPrefix(`/api`) || PathPrefix(`/dashboard`)"
-      - "traefik.http.routers.api.service=api@internal"
-      - "traefik.http.routers.api.middlewares=api-auth"    
-      - "traefik.http.middlewares.api-auth.basicauth.users=test:$$apr1$$H6uskkkW$$IgXLP6ewTrSuBkTrqE8wj/"
+      - /media/dream/lsb-build:/lsb-build
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.0.0
@@ -211,6 +107,7 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     networks:
       - lsb
+      - web
     logging:
       driver: "none"
 
@@ -233,8 +130,22 @@ services:
       LOG4J_LOGGER_KAFKA: WARN
     networks:
       - lsb
+      - web
     logging:
       driver: "none"
+
+  hivemind_zoo:
+    image: zookeeper
+    restart: always
+    hostname: hivemind_zoo
+    ports:
+      - 2182:2182
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=zoo1:2888:3888;2182
+    networks:
+      - lsb
+      - web
 
 networks:
   lsb:
