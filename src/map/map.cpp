@@ -606,7 +606,7 @@ int32 recv_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_da
                 return -1;
             }
 
-            fmtQuery = "SELECT session_key FROM accounts_sessions WHERE charid = %u LIMIT 1;";
+            fmtQuery = "SELECT session_key, encrypt FROM accounts_sessions WHERE charid = %u LIMIT 1;";
 
             ret = sql->Query(fmtQuery, CharID);
 
@@ -619,6 +619,7 @@ int32 recv_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_da
                 char* strSessionKey = nullptr;
                 sql->GetData(0, &strSessionKey, nullptr);
 
+                map_session_data->encrypt = (bool)sql->GetUIntData(1);
                 memcpy(map_session_data->blowfish.key, strSessionKey, 20);
             }
 
@@ -635,36 +636,36 @@ int32 recv_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_da
         }
         map_session_data->client_packet_id = 0;
         map_session_data->server_packet_id = 0;
-        return 0;
     }
     else
     {
-        // char packets
-        if (map_decipher_packet(buff, *buffsize, from, map_session_data) == -1)
+        if (map_session_data->encrypt) 
         {
-            *buffsize = 0;
-            return -1;
+            // char packets
+            if (map_decipher_packet(buff, *buffsize, from, map_session_data) == -1)
+            {
+                *buffsize = 0;
+                return -1;
+            }
+            // reading data size
+            uint32 PacketDataSize = ref<uint32>(buff, *buffsize - sizeof(int32) - 16);
+            // creating buffer for decompress data
+            auto PacketDataBuff = std::make_unique<int8[]>(MAX_BUFFER_SIZE);
+            // it's decompressing data and getting new size
+            PacketDataSize = zlib_decompress(buff + FFXI_HEADER_SIZE, PacketDataSize, PacketDataBuff.get(), MAX_BUFFER_SIZE);
+
+            // Not sure why zlib_decompress is defined to return a uint32 when it returns -1 in situations.
+            if (static_cast<int32>(PacketDataSize) != -1)
+            {
+                // it's making result buff
+                // don't need memcpy header
+                memcpy(buff + FFXI_HEADER_SIZE, PacketDataBuff.get(), PacketDataSize);
+                *buffsize = FFXI_HEADER_SIZE + PacketDataSize;
+
+            }
         }
-        // reading data size
-        uint32 PacketDataSize = ref<uint32>(buff, *buffsize - sizeof(int32) - 16);
-        // creating buffer for decompress data
-        auto PacketDataBuff = std::make_unique<int8[]>(MAX_BUFFER_SIZE);
-        // it's decompressing data and getting new size
-        PacketDataSize = zlib_decompress(buff + FFXI_HEADER_SIZE, PacketDataSize, PacketDataBuff.get(), MAX_BUFFER_SIZE);
-
-        // Not sure why zlib_decompress is defined to return a uint32 when it returns -1 in situations.
-        if (static_cast<int32>(PacketDataSize) != -1)
-        {
-            // it's making result buff
-            // don't need memcpy header
-            memcpy(buff + FFXI_HEADER_SIZE, PacketDataBuff.get(), PacketDataSize);
-            *buffsize = FFXI_HEADER_SIZE + PacketDataSize;
-
-            return 0;
-        }
-
-        return 0;
     }
+    return 0;
 }
 
 /************************************************************************
@@ -829,20 +830,27 @@ int32 send_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_da
 
             PacketCount -= PacketCount / 3;
 
-            // Compress the data without regard to the header
-            // The returned size is 8 times the real data
-            PacketSize = zlib_compress(buff + FFXI_HEADER_SIZE, (uint32)(*buffsize - FFXI_HEADER_SIZE), PTempBuff, MAX_BUFFER_SIZE);
-
-            // handle compression error
-            if (PacketSize == static_cast<uint32>(-1))
+            if (map_session_data->encrypt) 
             {
-                ShowError("zlib compression error");
-                continue;
+                // Compress the data without regard to the header
+                // The returned size is 8 times the real data
+                PacketSize = zlib_compress(buff + FFXI_HEADER_SIZE, (uint32)(*buffsize - FFXI_HEADER_SIZE), PTempBuff, MAX_BUFFER_SIZE);
+
+                // handle compression error
+                if (PacketSize == static_cast<uint32>(-1))
+                {
+                    ShowError("zlib compression error");
+                    continue;
+                }
+
+                ref<uint32>(PTempBuff, zlib_compressed_size(PacketSize)) = PacketSize;
+
+                PacketSize = (uint32)zlib_compressed_size(PacketSize) + 4;
             }
-
-            ref<uint32>(PTempBuff, zlib_compressed_size(PacketSize)) = PacketSize;
-
-            PacketSize = (uint32)zlib_compressed_size(PacketSize) + 4;
+            else 
+            {
+                PacketSize = (uint32)(*buffsize - FFXI_HEADER_SIZE);
+            }
 
         } while (PacketCount > 0 && PacketSize > 1300 - FFXI_HEADER_SIZE - 16); // max size for client to accept
 
@@ -875,18 +883,19 @@ int32 send_parse(int8* buff, size_t* buffsize, sockaddr_in* from, map_session_da
         ShowCritical("Memory manager: PTempBuff is overflowed (%u)", PacketSize);
     }
 
-    // Making total packet
-    memcpy(buff + FFXI_HEADER_SIZE, PTempBuff, PacketSize);
+    if (map_session_data->encrypt) {
+        // Making total packet
+        memcpy(buff + FFXI_HEADER_SIZE, PTempBuff, PacketSize);
 
-    uint32 CypherSize = (PacketSize / 4) & -2;
+        uint32 CypherSize = (PacketSize / 4) & -2;
 
-    blowfish_t* pbfkey = &map_session_data->blowfish;
+        blowfish_t* pbfkey = &map_session_data->blowfish;
 
-    for (uint32 j = 0; j < CypherSize; j += 2)
-    {
-        blowfish_encipher((uint32*)(buff) + j + 7, (uint32*)(buff) + j + 8, pbfkey->P, pbfkey->S[0]);
+        for (uint32 j = 0; j < CypherSize; j += 2)
+        {
+            blowfish_encipher((uint32*)(buff) + j + 7, (uint32*)(buff) + j + 8, pbfkey->P, pbfkey->S[0]);
+        }
     }
-
     // Control the size of the sent packet.
     // if its size exceeds 1400 bytes (data size + 42 bytes IP header),
     // then the client ignores the packet and returns a message about its loss
