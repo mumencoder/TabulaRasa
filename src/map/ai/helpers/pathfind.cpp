@@ -596,3 +596,8 @@ void CPathFind::FinishedPath()
         Clear();
     }
 }
+
+std::vector<position_t>& CPathFind::GetPathPoints()
+{
+    return m_points;
+}
