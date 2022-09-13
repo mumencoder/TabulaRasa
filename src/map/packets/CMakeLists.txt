@@ -184,6 +184,8 @@ set(PACKET_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/party_member_update.h
     ${CMAKE_CURRENT_SOURCE_DIR}/party_search.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/party_search.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/pathfind.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/pathfind.h
     ${CMAKE_CURRENT_SOURCE_DIR}/pet_sync.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pet_sync.h
     ${CMAKE_CURRENT_SOURCE_DIR}/position.cpp

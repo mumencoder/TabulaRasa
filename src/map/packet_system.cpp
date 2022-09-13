@@ -148,6 +148,7 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 #include "packets/party_invite.h"
 #include "packets/party_map.h"
 #include "packets/party_search.h"
+#include "packets/pathfind.h"
 #include "packets/position.h"
 #include "packets/release.h"
 #include "packets/release_special.h"
@@ -7596,6 +7597,33 @@ void SmallPacket0x11D(map_session_data_t* const PSession, CCharEntity* const PCh
 
 /************************************************************************
  *                                                                       *
+ *  Pathfind request                                                     *
+ *                                                                       *
+ ************************************************************************/
+
+void SmallPacket0x182(map_session_data_t* const PSession, CCharEntity* const PChar, CBasicPacket data)
+{
+    CPathFind pathFind = CPathFind(PChar);
+
+    uint16 path_type = data.ref<uint16>(0x04);
+
+    position_t p;
+    p.x = data.ref<float>(0x06);
+    p.y = data.ref<float>(0x0A);
+    p.z = data.ref<float>(0x0E);
+    if (path_type == 1003) {
+        pathFind.PathTo(p, 0, false);
+    }
+    else if (path_type == 3432) {
+        float max_dist = data.ref<float>(0x12);
+        uint8 turns = data.ref<uint8>(0x16);
+        pathFind.RoamAround(p, max_dist, turns, 0);
+    }
+    PChar->pushPacket(new CPathResultPacket(pathFind));
+}
+
+/************************************************************************
+ *                                                                       *
  *  Packet Array Initialization                                          *
  *                                                                       *
  ************************************************************************/
@@ -7728,6 +7756,7 @@ void PacketParserInitialize()
     PacketSize[0x118] = 0x00; PacketParser[0x118] = &SmallPacket0x118;
     PacketSize[0x11B] = 0x00; PacketParser[0x11B] = &SmallPacket0x11B;
     PacketSize[0x11D] = 0x00; PacketParser[0x11D] = &SmallPacket0x11D;
+    PacketSize[0x182] = 0x00; PacketParser[0x182] = &SmallPacket0x182;
     // clang-format on
 }
 
