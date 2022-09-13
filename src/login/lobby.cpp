@@ -290,6 +290,7 @@ int32 lobbydata_parse(int32 fd)
                 break;
             }
             case 0xA2:
+            case 0xA3:
             {
                 LOBBY_A2_RESERVEPACKET(ReservePacket);
                 uint8 key3[20];
@@ -407,11 +408,12 @@ int32 lobbydata_parse(int32 fd)
                         char session_key[sizeof(key3) * 2 + 1];
                         bin2hex(session_key, key3, sizeof(key3));
 
-                        fmtQuery = "INSERT INTO accounts_sessions(accid,charid,session_key,server_addr,server_port,client_addr, version_mismatch) "
-                                   "VALUES(%u,%u,x'%s',%u,%u,%u,%u)";
+                        bool encrypt = code == 0xA2;
+                        fmtQuery = "INSERT INTO accounts_sessions(accid,charid,session_key,server_addr,server_port,client_addr, version_mismatch, encrypt) "
+                                   "VALUES(%u,%u,x'%s',%u,%u,%u,%u,%u)";
 
                         if (sql->Query(fmtQuery, sd->accid, charid, session_key, ZoneIP, ZonePort, sd->client_addr,
-                                       (uint8)sessions[sd->login_lobbyview_fd]->ver_mismatch) == SQL_ERROR)
+                                       (uint8)sessions[sd->login_lobbyview_fd]->ver_mismatch, encrypt) == SQL_ERROR)
                         {
                             // Send error message to the client.
                             LOBBBY_ERROR_MESSAGE(ReservePacketError);

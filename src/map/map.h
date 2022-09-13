@@ -54,6 +54,7 @@ struct map_session_data_t
     size_t       server_packet_size = 0;       // the size of the packet that was previously sent to the client
     time_t       last_update        = 0;       // time of last packet recv
     blowfish_t   blowfish           = {};      // unique decypher keys
+    bool         encrypt            = true;
     CCharEntity* PChar              = nullptr; // game char
     uint8        shuttingDown       = 0;       // prevents double session closing
 };
