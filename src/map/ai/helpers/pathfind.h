@@ -128,7 +128,7 @@ public:
     // YOU HAVE BEEN WARNED!
     void SetCarefulPathing(bool careful);
 
-    std::vector<position_t>& GetPathPoints();
+    std::vector<pathpoint_t>& GetPathPoints();
 
 private:
     // find a valid path using polys

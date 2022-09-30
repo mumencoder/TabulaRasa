@@ -12,9 +12,9 @@ CPathResultPacket::CPathResultPacket(CPathFind& path) {
     ref<uint16>(0x04) = pts;
     int offset = 0x06;
     for(auto i = 0; i < pts; i++) {
-        ref<float>(offset) = points[i].x;
-        ref<float>(offset+4) = points[i].y;
-        ref<float>(offset+8) = points[i].z;
+        ref<float>(offset) = points[i].position.x;
+        ref<float>(offset+4) = points[i].position.y;
+        ref<float>(offset+8) = points[i].position.z;
         offset += 12;
     }    
 }
